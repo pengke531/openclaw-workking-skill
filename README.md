@@ -18,6 +18,8 @@ It is designed for:
 - followers `>= 100000`
 - local file-based dedup and persistence
 - provider rotation on each launch
+- fast provider health probes before each cycle
+- automatic provider skip when unhealthy
 - exactly 8 candidates per cycle
 - immediate save on every new qualified creator
 - automatic fresh-cycle restart after each new qualified creator

@@ -125,12 +125,14 @@ def load_state() -> dict[str, Any]:
             "batch_size": 8,
             "single_cycle_timeout_seconds": 900,
             "idle_stop_seconds": 1800,
+            "provider_probe_timeout_seconds": 5,
             "run_started_at": None,
             "run_finished_at": None,
             "last_unique_qualified_at": None,
             "last_stop_reason": None,
             "total_cycles": 0,
             "total_new_unique": 0,
+            "last_provider_probe_results": [],
             "updated_at": utc_now(),
         },
     )
@@ -385,6 +387,7 @@ def start_run() -> dict[str, Any]:
         "batch_size": state["batch_size"],
         "single_cycle_timeout_seconds": state["single_cycle_timeout_seconds"],
         "idle_stop_seconds": state["idle_stop_seconds"],
+        "provider_probe_timeout_seconds": state["provider_probe_timeout_seconds"],
         "run_started_at": state["run_started_at"],
         "last_unique_qualified_at": state["last_unique_qualified_at"],
     }
@@ -409,6 +412,13 @@ def complete_cycle(new_unique: int) -> dict[str, Any]:
     if new_unique > 0:
         state["total_new_unique"] = int(state.get("total_new_unique", 0)) + new_unique
         state["last_unique_qualified_at"] = utc_now()
+    save_state(state)
+    return {"ok": True, "state": state}
+
+
+def update_provider_probes(results: list[dict[str, Any]]) -> dict[str, Any]:
+    state = load_state()
+    state["last_provider_probe_results"] = results
     save_state(state)
     return {"ok": True, "state": state}
 
@@ -466,6 +476,8 @@ def main() -> int:
     sub.add_parser("status")
     complete = sub.add_parser("complete-cycle")
     complete.add_argument("--new-unique", type=int, required=True)
+    probes = sub.add_parser("update-provider-probes")
+    probes.add_argument("--payload", required=True)
 
     uq = sub.add_parser("upsert-qualified")
     uq.add_argument("--payload", required=True)
@@ -489,6 +501,11 @@ def main() -> int:
             result = status()
         elif args.command == "complete-cycle":
             result = complete_cycle(args.new_unique)
+        elif args.command == "update-provider-probes":
+            payload = read_json(Path(args.payload), [])
+            if not isinstance(payload, list):
+                raise ValueError("probe payload must be a JSON list")
+            result = update_provider_probes(payload)
         elif args.command == "upsert-qualified":
             payload = load_payload(Path(args.payload))
             validate_payload(payload)

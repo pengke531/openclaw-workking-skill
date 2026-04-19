@@ -75,12 +75,16 @@ The runner is the hard control layer. It enforces:
 - before every cycle, the local registry index is read and used as the ignore
   list
 - every new start rotates the preferred provider automatically
+- before every cycle, providers are probed with a short timeout and unhealthy
+  providers are skipped automatically
 
 Provider policy:
 
 - if one provider is down, rate-limited, or noisy, move to the next provider
 - do not block the whole run on one crawler
 - next launch must rotate the preferred provider automatically
+- provider probing must be fast; if a provider cannot prove readiness quickly,
+  treat it as unavailable for this cycle
 
 Use any available tools in this priority order:
 
