@@ -14,6 +14,7 @@ fi
 
 for path in \
   "$TARGET_ROOT/skills/workking/SKILL.md" \
+  "$TARGET_ROOT/skills/workking/scripts/workking_runner.py" \
   "$TARGET_ROOT/skills/workking/scripts/workking_store.py"
 do
   if [ ! -f "$path" ]; then

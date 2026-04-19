@@ -57,35 +57,24 @@ Important files:
 
 ### `/workking` or `/workking start`
 
-1. Use `exec` to initialize the run:
+1. Use `exec` to start the deterministic runner:
 
 ```powershell
-python {baseDir}/scripts/workking_store.py start-run
+python {baseDir}/scripts/workking_runner.py start
 ```
 
-2. Read the returned JSON. It contains:
+2. Return only the runner summary.
 
-- `data_root`
-- `index_path`
-- `provider_order`
-- `run_started_at`
-- `last_unique_qualified_at`
+The runner is the hard control layer. It enforces:
 
-3. Read `registry/index.json` before searching. Use its handles and profile URLs
-   as the ignore list for this run.
-
-4. Run a continuous search loop in the current agent only.
-
-Run rules:
-
-- single cycle must stay under 15 minutes
-- if 30 minutes pass without a new unique qualified creator, stop the run
-- every time one qualified creator is found, store it immediately, then start a
-  fresh cycle
-- never wait for a whole large batch before storing
-
-5. Provider order comes from `start-run`. Use the providers in that order for
-   this launch.
+- every cycle searches exactly 8 candidates before verification
+- every cycle must stay under 15 minutes
+- if 30 minutes pass without a new unique qualified creator, the run stops
+- every time one qualified and non-duplicate creator is found, it is stored
+  immediately and the runner launches a fresh cycle automatically
+- before every cycle, the local registry index is read and used as the ignore
+  list
+- every new start rotates the preferred provider automatically
 
 Provider policy:
 
@@ -173,19 +162,19 @@ Then stop cleanly and report a short summary only.
 If the user runs `/workking stop`:
 
 ```powershell
-python {baseDir}/scripts/workking_store.py stop-run
+python {baseDir}/scripts/workking_runner.py stop
 ```
 
 ### `/workking status`
 
 ```powershell
-python {baseDir}/scripts/workking_store.py status
+python {baseDir}/scripts/workking_runner.py status
 ```
 
 ### `/workking export`
 
 ```powershell
-python {baseDir}/scripts/workking_store.py export --format markdown
+python {baseDir}/scripts/workking_runner.py export --format markdown
 ```
 
 ## Important behavior

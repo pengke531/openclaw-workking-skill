@@ -18,6 +18,9 @@ It is designed for:
 - followers `>= 100000`
 - local file-based dedup and persistence
 - provider rotation on each launch
+- exactly 8 candidates per cycle
+- immediate save on every new qualified creator
+- automatic fresh-cycle restart after each new qualified creator
 - 15 minute per-cycle cap
 - 30 minute no-new-creator stop rule
 
@@ -54,6 +57,8 @@ Other commands:
 ## Installed path
 
 - `~/.openclaw/skills/workking/SKILL.md`
+- `~/.openclaw/skills/workking/scripts/workking_runner.py`
+- `~/.openclaw/skills/workking/scripts/workking_store.py`
 
 ## Local data path
 

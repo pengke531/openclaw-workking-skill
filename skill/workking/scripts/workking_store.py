@@ -122,10 +122,15 @@ def load_state() -> dict[str, Any]:
                 "apify",
                 "brightdata",
             ],
+            "batch_size": 8,
+            "single_cycle_timeout_seconds": 900,
+            "idle_stop_seconds": 1800,
             "run_started_at": None,
             "run_finished_at": None,
             "last_unique_qualified_at": None,
             "last_stop_reason": None,
+            "total_cycles": 0,
+            "total_new_unique": 0,
             "updated_at": utc_now(),
         },
     )
@@ -367,6 +372,8 @@ def start_run() -> dict[str, Any]:
     state["run_finished_at"] = None
     state["last_unique_qualified_at"] = state["run_started_at"]
     state["last_stop_reason"] = None
+    state["total_cycles"] = 0
+    state["total_new_unique"] = 0
     save_state(state)
     return {
         "ok": True,
@@ -375,6 +382,9 @@ def start_run() -> dict[str, Any]:
         "pending_path": str(PENDING_PATH),
         "tmp_dir": str(TMP_DIR),
         "provider_order": rotated,
+        "batch_size": state["batch_size"],
+        "single_cycle_timeout_seconds": state["single_cycle_timeout_seconds"],
+        "idle_stop_seconds": state["idle_stop_seconds"],
         "run_started_at": state["run_started_at"],
         "last_unique_qualified_at": state["last_unique_qualified_at"],
     }
@@ -391,6 +401,16 @@ def finish_run(stop_reason: str) -> dict[str, Any]:
 
 def stop_run() -> dict[str, Any]:
     return finish_run("stopped manually")
+
+
+def complete_cycle(new_unique: int) -> dict[str, Any]:
+    state = load_state()
+    state["total_cycles"] = int(state.get("total_cycles", 0)) + 1
+    if new_unique > 0:
+        state["total_new_unique"] = int(state.get("total_new_unique", 0)) + new_unique
+        state["last_unique_qualified_at"] = utc_now()
+    save_state(state)
+    return {"ok": True, "state": state}
 
 
 def status() -> dict[str, Any]:
@@ -444,6 +464,8 @@ def main() -> int:
     finish.add_argument("--stop-reason", required=True)
     sub.add_parser("stop-run")
     sub.add_parser("status")
+    complete = sub.add_parser("complete-cycle")
+    complete.add_argument("--new-unique", type=int, required=True)
 
     uq = sub.add_parser("upsert-qualified")
     uq.add_argument("--payload", required=True)
@@ -465,6 +487,8 @@ def main() -> int:
             result = stop_run()
         elif args.command == "status":
             result = status()
+        elif args.command == "complete-cycle":
+            result = complete_cycle(args.new_unique)
         elif args.command == "upsert-qualified":
             payload = load_payload(Path(args.payload))
             validate_payload(payload)

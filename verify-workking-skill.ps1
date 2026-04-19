@@ -7,6 +7,7 @@ $ErrorActionPreference = "Stop"
 $skillRoot = Join-Path (Join-Path $TargetRoot "skills") "workking"
 $required = @(
   (Join-Path $skillRoot "SKILL.md"),
+  (Join-Path (Join-Path $skillRoot "scripts") "workking_runner.py"),
   (Join-Path (Join-Path $skillRoot "scripts") "workking_store.py")
 )
 
