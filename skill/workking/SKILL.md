@@ -91,7 +91,12 @@ Use any available tools in this priority order:
 1. `agent-reach`
 2. `autoglm-browser-agent`
 3. `search` or `tavily`
-4. direct web search or profile pages
+4. `openclaw-core`
+5. direct web search or profile pages
+
+`openclaw-core` means the normal OpenClaw built-in browsing, fetch, and search
+capabilities, so the skill still has a compatible fallback even when no extra
+community skill is installed.
 
 If the host has API keys configured, prefer these external providers in the
 same order returned by `provider_order`:

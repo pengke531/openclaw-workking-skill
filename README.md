@@ -20,6 +20,7 @@ It is designed for:
 - provider rotation on each launch
 - fast provider health probes before each cycle
 - automatic provider skip when unhealthy
+- `openclaw-core` builtin fallback for plain OpenClaw installs
 - exactly 8 candidates per cycle
 - immediate save on every new qualified creator
 - automatic fresh-cycle restart after each new qualified creator
@@ -65,3 +66,13 @@ Other commands:
 ## Local data path
 
 - `~/.openclaw/data/workking/instagram-nepal/`
+- `~/.openclaw/data/workking/workking.config.json`
+
+## Configuration
+
+On first install, an example config is copied to:
+
+- `~/.openclaw/data/workking/workking.config.json`
+
+That file controls provider order and runtime timeouts without requiring users
+to edit the skill itself.

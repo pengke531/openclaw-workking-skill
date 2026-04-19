@@ -91,6 +91,23 @@ def quick_url_check(url: str, headers: dict[str, str] | None, timeout_seconds: i
 
 def probe_provider(provider: str, available_skills: set[str], timeout_seconds: int) -> dict[str, Any]:
     provider_lower = provider.strip().lower()
+    if provider_lower == "openclaw-core":
+        try:
+            resolve_openclaw()
+            return {
+                "provider": provider,
+                "ready": True,
+                "reason": "openclaw_core_ready",
+                "kind": "builtin",
+            }
+        except Exception as exc:
+            return {
+                "provider": provider,
+                "ready": False,
+                "reason": exc.__class__.__name__,
+                "kind": "builtin",
+            }
+
     if provider_lower in {"agent-reach", "autoglm-browser-agent", "search", "tavily"}:
         ready = provider_lower in available_skills
         return {
@@ -115,7 +132,12 @@ def probe_provider(provider: str, available_skills: set[str], timeout_seconds: i
         api_key = os.environ.get("BRIGHTDATA_API_KEY", "").strip()
         if not api_key:
             return {"provider": provider, "ready": False, "reason": "missing_brightdata_api_key", "kind": "api"}
-        health_url = os.environ.get("BRIGHTDATA_HEALTHCHECK_URL", "").strip() or "https://api.brightdata.com/"
+        state = status_state()["state"]
+        health_url = (
+            os.environ.get("BRIGHTDATA_HEALTHCHECK_URL", "").strip()
+            or state.get("brightdata_healthcheck_url")
+            or "https://api.brightdata.com/"
+        )
         ok, reason = quick_url_check(
             health_url,
             headers={"Authorization": f"Bearer {api_key}"},
@@ -144,6 +166,7 @@ def build_cycle_message(provider_order: list[str], batch_size: int) -> str:
         f"Preferred crawler/provider this cycle: {preferred}. "
         f"Fallback order if it fails or becomes noisy: {fallbacks}. "
         "Search only Instagram. Keep Nepal only, personal creator only, followers >= 100000, and strict evidence gates. "
+        "If provider is openclaw-core, use only the built-in OpenClaw browsing, fetch, and search capabilities available in this environment. "
         "Verify geography, persona, and follower evidence one profile at a time. "
         "As soon as one qualified and non-duplicate creator is found, write the payload through workking_store.py upsert-qualified, "
         "then stop the current cycle immediately so the runner can launch the next cycle. "

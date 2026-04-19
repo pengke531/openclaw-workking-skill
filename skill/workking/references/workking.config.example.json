@@ -1,0 +1,15 @@
+{
+  "provider_order": [
+    "agent-reach",
+    "autoglm-browser-agent",
+    "search",
+    "openclaw-core",
+    "apify",
+    "brightdata"
+  ],
+  "batch_size": 8,
+  "single_cycle_timeout_seconds": 900,
+  "idle_stop_seconds": 1800,
+  "provider_probe_timeout_seconds": 5,
+  "brightdata_healthcheck_url": "https://api.brightdata.com/"
+}

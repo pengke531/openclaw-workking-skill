@@ -23,7 +23,16 @@ def default_data_root() -> Path:
     return Path.home() / ".openclaw" / "data" / "workking" / "instagram-nepal"
 
 
+def default_config_root() -> Path:
+    state_dir = os.environ.get("OPENCLAW_STATE_DIR")
+    if state_dir:
+        return Path(state_dir).expanduser().resolve() / "data" / "workking"
+    return Path.home() / ".openclaw" / "data" / "workking"
+
+
 DATA_ROOT = default_data_root()
+CONFIG_ROOT = default_config_root()
+CONFIG_PATH = CONFIG_ROOT / "workking.config.json"
 REGISTRY_DIR = DATA_ROOT / "registry"
 CREATORS_DIR = REGISTRY_DIR / "creators"
 EVIDENCE_DIR = DATA_ROOT / "evidence" / "reviews"
@@ -36,8 +45,30 @@ PENDING_PATH = EXPORTS_DIR / "pending_submissions.json"
 
 
 def ensure_dirs() -> None:
-    for path in (CREATORS_DIR, EVIDENCE_DIR, EXPORTS_DIR, TMP_DIR, RUNTIME_DIR):
+    for path in (CONFIG_ROOT, CREATORS_DIR, EVIDENCE_DIR, EXPORTS_DIR, TMP_DIR, RUNTIME_DIR):
         path.mkdir(parents=True, exist_ok=True)
+
+
+def load_config() -> dict[str, Any]:
+    ensure_dirs()
+    return read_json(
+        CONFIG_PATH,
+        {
+            "provider_order": [
+                "agent-reach",
+                "autoglm-browser-agent",
+                "search",
+                "openclaw-core",
+                "apify",
+                "brightdata",
+            ],
+            "batch_size": 8,
+            "single_cycle_timeout_seconds": 900,
+            "idle_stop_seconds": 1800,
+            "provider_probe_timeout_seconds": 5,
+            "brightdata_healthcheck_url": "https://api.brightdata.com/",
+        },
+    )
 
 
 def read_json(path: Path, default: Any) -> Any:
@@ -109,23 +140,18 @@ def save_index(index: dict[str, Any]) -> None:
 
 
 def load_state() -> dict[str, Any]:
+    config = load_config()
     return read_json(
         STATE_PATH,
         {
             "trigger_command": "/workking",
             "status": "idle",
             "provider_cursor": 0,
-            "provider_order": [
-                "agent-reach",
-                "autoglm-browser-agent",
-                "search",
-                "apify",
-                "brightdata",
-            ],
-            "batch_size": 8,
-            "single_cycle_timeout_seconds": 900,
-            "idle_stop_seconds": 1800,
-            "provider_probe_timeout_seconds": 5,
+            "provider_order": list(config.get("provider_order", [])),
+            "batch_size": int(config.get("batch_size", 8)),
+            "single_cycle_timeout_seconds": int(config.get("single_cycle_timeout_seconds", 900)),
+            "idle_stop_seconds": int(config.get("idle_stop_seconds", 1800)),
+            "provider_probe_timeout_seconds": int(config.get("provider_probe_timeout_seconds", 5)),
             "run_started_at": None,
             "run_finished_at": None,
             "last_unique_qualified_at": None,
@@ -359,13 +385,7 @@ def record_review(payload: ReviewPayload) -> dict[str, Any]:
 def start_run() -> dict[str, Any]:
     ensure_dirs()
     state = load_state()
-    providers = list(state.get("provider_order", [])) or [
-        "agent-reach",
-        "autoglm-browser-agent",
-        "search",
-        "apify",
-        "brightdata",
-    ]
+    providers = list(state.get("provider_order", [])) or list(load_config().get("provider_order", []))
     cursor = int(state.get("provider_cursor", 0)) % len(providers)
     rotated = providers[cursor:] + providers[:cursor]
     state["provider_cursor"] = (cursor + 1) % len(providers)

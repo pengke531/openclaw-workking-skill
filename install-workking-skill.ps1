@@ -7,6 +7,9 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $skillSource = Join-Path $repoRoot "skill\\workking"
 $skillTarget = Join-Path $TargetRoot "skills\\workking"
+$configSource = Join-Path $skillSource "references\\workking.config.example.json"
+$configRoot = Join-Path (Join-Path $TargetRoot "data") "workking"
+$configTarget = Join-Path $configRoot "workking.config.json"
 
 if (-not (Test-Path $skillSource)) {
   throw "missing skill source: $skillSource"
@@ -17,6 +20,11 @@ if (Test-Path $skillTarget) {
   Remove-Item -Recurse -Force $skillTarget
 }
 Copy-Item -Recurse -Force $skillSource $skillTarget
+New-Item -ItemType Directory -Force -Path $configRoot | Out-Null
+if ((Test-Path $configSource) -and -not (Test-Path $configTarget)) {
+  Copy-Item -Force $configSource $configTarget
+}
 
 Write-Host "[workking] installed to: $skillTarget"
+Write-Host "[workking] config path:  $configTarget"
 Write-Host "[workking] next: start a new OpenClaw session, then run /workking"
