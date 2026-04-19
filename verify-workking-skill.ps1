@@ -5,12 +5,10 @@ param(
 $ErrorActionPreference = "Stop"
 
 $skillRoot = Join-Path (Join-Path $TargetRoot "skills") "workking"
-$configPath = Join-Path (Join-Path (Join-Path $TargetRoot "data") "workking") "workking.config.json"
 $required = @(
   (Join-Path $skillRoot "SKILL.md"),
   (Join-Path (Join-Path $skillRoot "scripts") "workking_runner.py"),
-  (Join-Path (Join-Path $skillRoot "scripts") "workking_store.py"),
-  $configPath
+  (Join-Path (Join-Path $skillRoot "scripts") "workking_store.py")
 )
 
 foreach ($path in $required) {

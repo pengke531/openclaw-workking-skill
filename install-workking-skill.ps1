@@ -1,5 +1,6 @@
 param(
-  [string]$TargetRoot = "$HOME\\.openclaw"
+  [string]$TargetRoot = "$HOME\\.openclaw",
+  [switch]$WithConfig
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,11 +21,15 @@ if (Test-Path $skillTarget) {
   Remove-Item -Recurse -Force $skillTarget
 }
 Copy-Item -Recurse -Force $skillSource $skillTarget
-New-Item -ItemType Directory -Force -Path $configRoot | Out-Null
-if ((Test-Path $configSource) -and -not (Test-Path $configTarget)) {
-  Copy-Item -Force $configSource $configTarget
+if ($WithConfig) {
+  New-Item -ItemType Directory -Force -Path $configRoot | Out-Null
+  if ((Test-Path $configSource) -and -not (Test-Path $configTarget)) {
+    Copy-Item -Force $configSource $configTarget
+  }
 }
 
 Write-Host "[workking] installed to: $skillTarget"
-Write-Host "[workking] config path:  $configTarget"
 Write-Host "[workking] next: start a new OpenClaw session, then run /workking"
+if ($WithConfig) {
+  Write-Host "[workking] optional config copied to: $configTarget"
+}

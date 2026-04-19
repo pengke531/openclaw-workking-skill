@@ -8,6 +8,7 @@ SKILL_TARGET="$TARGET_ROOT/skills/workking"
 CONFIG_SOURCE="$SKILL_SOURCE/references/workking.config.example.json"
 CONFIG_ROOT="$TARGET_ROOT/data/workking"
 CONFIG_TARGET="$CONFIG_ROOT/workking.config.json"
+WITH_CONFIG="${WITH_CONFIG:-0}"
 
 if [ ! -d "$SKILL_SOURCE" ]; then
   echo "missing skill source: $SKILL_SOURCE"
@@ -17,11 +18,15 @@ fi
 mkdir -p "$(dirname "$SKILL_TARGET")"
 rm -rf "$SKILL_TARGET"
 cp -R "$SKILL_SOURCE" "$SKILL_TARGET"
-mkdir -p "$CONFIG_ROOT"
-if [ -f "$CONFIG_SOURCE" ] && [ ! -f "$CONFIG_TARGET" ]; then
-  cp "$CONFIG_SOURCE" "$CONFIG_TARGET"
+if [ "$WITH_CONFIG" = "1" ]; then
+  mkdir -p "$CONFIG_ROOT"
+  if [ -f "$CONFIG_SOURCE" ] && [ ! -f "$CONFIG_TARGET" ]; then
+    cp "$CONFIG_SOURCE" "$CONFIG_TARGET"
+  fi
 fi
 
 echo "[workking] installed to: $SKILL_TARGET"
-echo "[workking] config path:  $CONFIG_TARGET"
 echo "[workking] next: start a new OpenClaw session, then run /workking"
+if [ "$WITH_CONFIG" = "1" ]; then
+  echo "[workking] optional config copied to: $CONFIG_TARGET"
+fi

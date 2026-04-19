@@ -15,8 +15,7 @@ fi
 for path in \
   "$TARGET_ROOT/skills/workking/SKILL.md" \
   "$TARGET_ROOT/skills/workking/scripts/workking_runner.py" \
-  "$TARGET_ROOT/skills/workking/scripts/workking_store.py" \
-  "$TARGET_ROOT/data/workking/workking.config.json"
+  "$TARGET_ROOT/skills/workking/scripts/workking_store.py"
 do
   if [ ! -f "$path" ]; then
     echo "missing required file: $path"

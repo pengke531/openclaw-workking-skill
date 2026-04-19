@@ -32,13 +32,13 @@ It is designed for:
 Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\install-workking-skill.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
 Bash:
 
 ```bash
-./install-workking-skill.sh
+./install.sh
 ```
 
 ## Use
@@ -70,9 +70,13 @@ Other commands:
 
 ## Configuration
 
-On first install, an example config is copied to:
+No configuration is required for the default install.
+
+Only if someone wants to customize provider order or timeouts, they can copy the
+example config manually:
 
 - `~/.openclaw/data/workking/workking.config.json`
 
-That file controls provider order and runtime timeouts without requiring users
-to edit the skill itself.
+Example source:
+
+- `skill/workking/references/workking.config.example.json`
