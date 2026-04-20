@@ -28,6 +28,36 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc).replace(microsecond=0)
 
 
+def seconds_since(started_at: str | None) -> int:
+    started = parse_utc(started_at)
+    if started is None:
+        return 0
+    return int((utc_now() - started).total_seconds())
+
+
+def compute_remaining_province_window_seconds(state: dict[str, Any]) -> int:
+    started = parse_utc(state.get("run_started_at"))
+    if started is None:
+        return max(int(state.get("province_switch_seconds", 1800)), 1)
+    switch_seconds = max(int(state.get("province_switch_seconds", 1800)), 1)
+    elapsed = int((utc_now() - started).total_seconds())
+    consumed = elapsed % switch_seconds
+    remaining = switch_seconds - consumed
+    return remaining if remaining > 0 else switch_seconds
+
+
+def compute_effective_batch_size(
+    configured_batch_size: int,
+    candidate_cooldown_seconds: int,
+    remaining_province_window_seconds: int,
+) -> int:
+    configured_batch_size = max(configured_batch_size, 1)
+    candidate_cooldown_seconds = max(candidate_cooldown_seconds, 1)
+    safe_window = max(remaining_province_window_seconds - 120, candidate_cooldown_seconds)
+    window_based_cap = max(safe_window // candidate_cooldown_seconds, 1)
+    return max(1, min(configured_batch_size, window_based_cap))
+
+
 def resolve_openclaw() -> str:
     for candidate in ("openclaw", "openclaw.cmd", "openclaw.exe"):
         found = shutil.which(candidate)
@@ -155,14 +185,37 @@ def select_provider_chain(provider_order: list[str], probe_timeout_seconds: int)
     return ready_chain, probe_results
 
 
-def build_cycle_message(provider_order: list[str], batch_size: int) -> str:
+def compute_active_province(state: dict[str, Any], province_order: list[str]) -> str:
+    if not province_order:
+        return "Nepal"
+    base_cursor = int(state.get("run_province_base_cursor", state.get("province_cursor", 0))) % len(province_order)
+    switch_seconds = max(int(state.get("province_switch_seconds", 1800)), 1)
+    elapsed_windows = seconds_since(state.get("run_started_at")) // switch_seconds
+    return province_order[(base_cursor + elapsed_windows) % len(province_order)]
+
+
+def build_cycle_message(
+    provider_order: list[str],
+    batch_size: int,
+    active_province: str,
+    province_order: list[str],
+    candidate_cooldown_seconds: int,
+    remaining_province_window_seconds: int,
+) -> str:
     preferred = provider_order[0]
     fallbacks = ", ".join(provider_order[1:]) if len(provider_order) > 1 else "none"
+    province_scope = ", ".join(province_order) if province_order else "Nepal"
     return (
         "Use the workking skill rules for Nepal Instagram creator discovery. "
         "Before searching, read the local registry index from ~/.openclaw/data/workking/instagram-nepal/registry/index.json "
         "or the OPENCLAW_STATE_DIR equivalent and ignore every stored handle and profile URL. "
         f"Use a single search cycle of exactly {batch_size} candidates before verification. "
+        f"Current province focus: {active_province}. "
+        f"Province rotation set: {province_scope}. "
+        "Search only inside the current province focus for this cycle, then let the runner rotate provinces on schedule. "
+        f"You have about {remaining_province_window_seconds} seconds left before the province must rotate. "
+        f"Throttle the workflow so there is at least {candidate_cooldown_seconds} seconds between each individual candidate search or profile verification action. "
+        "This cooldown applies between one creator lookup and the next creator lookup, not between cycles. "
         f"Preferred crawler/provider this cycle: {preferred}. "
         f"Fallback order if it fails or becomes noisy: {fallbacks}. "
         "Search only Instagram. Keep Nepal only, personal creator only, followers >= 100000, and strict evidence gates. "
@@ -199,9 +252,13 @@ def start() -> dict[str, Any]:
     run_info = store_command("start-run")
     index_path = Path(run_info["index_path"])
     provider_order = list(run_info["provider_order"])
-    batch_size = int(run_info.get("batch_size", 8))
-    single_cycle_timeout_seconds = int(run_info.get("single_cycle_timeout_seconds", 900))
-    idle_stop_seconds = int(run_info.get("idle_stop_seconds", 1800))
+    province_order = list(run_info.get("province_order", []))
+    batch_size = int(run_info.get("batch_size", 5))
+    candidate_cooldown_seconds = int(run_info.get("candidate_cooldown_seconds", 300))
+    provider_retry_cooldown_seconds = int(run_info.get("provider_retry_cooldown_seconds", 30))
+    single_cycle_timeout_seconds = int(run_info.get("single_cycle_timeout_seconds", 10800))
+    idle_stop_seconds = int(run_info.get("idle_stop_seconds", 10800))
+    max_run_seconds = int(run_info.get("max_run_seconds", 10800))
     provider_probe_timeout_seconds = int(run_info.get("provider_probe_timeout_seconds", 5))
 
     cycles: list[dict[str, Any]] = []
@@ -210,6 +267,11 @@ def start() -> dict[str, Any]:
         current = status_state()["state"]
         if current.get("status") != "running":
             return {"ok": True, "state": current, "cycles": cycles}
+        if seconds_since(current.get("run_started_at")) >= max_run_seconds:
+            finished = store_command("finish-run", "--stop-reason", f"max run window reached ({max_run_seconds} seconds)")
+            return {"ok": True, "state": finished["state"], "cycles": cycles}
+
+        active_province = compute_active_province(current, province_order)
 
         ready_chain, probe_results = select_provider_chain(provider_order, provider_probe_timeout_seconds)
         probe_payload_path = Path(run_info["tmp_dir"]) / "provider_probes.json"
@@ -228,6 +290,7 @@ def start() -> dict[str, Any]:
                     "timed_out": False,
                     "returncode": None,
                     "stderr": "no ready providers after probing",
+                    "province": active_province,
                     "probe_results": probe_results,
                 }
             )
@@ -235,12 +298,37 @@ def start() -> dict[str, Any]:
                 finished = store_command("finish-run", "--stop-reason", "no healthy providers and idle window exceeded")
                 return {"ok": True, "state": finished["state"], "cycles": cycles}
             provider_order = provider_order[1:] + provider_order[:1]
-            time.sleep(1)
+            time.sleep(provider_retry_cooldown_seconds)
             continue
 
         before_count = count_registered_handles(index_path)
         active_chain = ready_chain + [provider for provider in provider_order if provider not in ready_chain]
-        result = run_cycle(build_cycle_message(active_chain, batch_size), single_cycle_timeout_seconds)
+        remaining_province_window_seconds = compute_remaining_province_window_seconds(current)
+        remaining_run_seconds = max_run_seconds - seconds_since(current.get("run_started_at"))
+        effective_batch_size = compute_effective_batch_size(
+            batch_size,
+            candidate_cooldown_seconds,
+            remaining_province_window_seconds,
+        )
+        cycle_timeout_seconds = max(
+            60,
+            min(
+                single_cycle_timeout_seconds,
+                remaining_province_window_seconds,
+                max(remaining_run_seconds, 60),
+            ),
+        )
+        result = run_cycle(
+            build_cycle_message(
+                active_chain,
+                effective_batch_size,
+                active_province,
+                province_order,
+                candidate_cooldown_seconds,
+                remaining_province_window_seconds,
+            ),
+            cycle_timeout_seconds,
+        )
         after_count = count_registered_handles(index_path)
         new_unique = max(after_count - before_count, 0)
 
@@ -249,6 +337,10 @@ def start() -> dict[str, Any]:
         cycle_summary = {
             "finished_at": utc_now().isoformat().replace("+00:00", "Z"),
             "provider": ready_chain[0],
+            "province": active_province,
+            "batch_size": effective_batch_size,
+            "candidate_cooldown_seconds": candidate_cooldown_seconds,
+            "remaining_province_window_seconds": remaining_province_window_seconds,
             "new_unique": new_unique,
             "timed_out": bool(result.get("timed_out")),
             "returncode": result.get("returncode"),

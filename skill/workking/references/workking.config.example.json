@@ -7,9 +7,22 @@
     "apify",
     "brightdata"
   ],
-  "batch_size": 8,
-  "single_cycle_timeout_seconds": 900,
-  "idle_stop_seconds": 1800,
+  "batch_size": 5,
+  "candidate_cooldown_seconds": 300,
+  "provider_retry_cooldown_seconds": 30,
+  "single_cycle_timeout_seconds": 10800,
+  "idle_stop_seconds": 10800,
+  "max_run_seconds": 10800,
   "provider_probe_timeout_seconds": 5,
+  "province_switch_seconds": 1800,
+  "province_order": [
+    "Koshi Province",
+    "Madhesh Province",
+    "Bagmati Province",
+    "Gandaki Province",
+    "Lumbini Province",
+    "Karnali Province",
+    "Sudurpashchim Province"
+  ],
   "brightdata_healthcheck_url": "https://api.brightdata.com/"
 }

@@ -4,6 +4,9 @@
 
 It is not tied to any special agent topology. One agent is enough.
 
+The installer also patches the target OpenClaw agent so `/workking` can launch
+its Python runner with `exec`. By default it patches the `main` agent.
+
 After install, a user can start it directly with:
 
 ```text
@@ -21,11 +24,13 @@ It is designed for:
 - fast provider health probes before each cycle
 - automatic provider skip when unhealthy
 - `openclaw-core` builtin fallback for plain OpenClaw installs
-- exactly 8 candidates per cycle
+- bounded candidate cap per province window
+- per-candidate cooldown to reduce creator lookup frequency
 - immediate save on every new qualified creator
 - automatic fresh-cycle restart after each new qualified creator
-- 15 minute per-cycle cap
-- 30 minute no-new-creator stop rule
+- up to 3 hour run window
+- 3 hour no-new-creator stop rule
+- Nepal province rotation every 30 minutes
 
 ## Install
 
@@ -35,10 +40,22 @@ Windows:
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
+Patch a different agent:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -AgentId a02
+```
+
 Bash:
 
 ```bash
 ./install.sh
+```
+
+Patch a different agent:
+
+```bash
+AGENT_ID=a02 ./install.sh
 ```
 
 ## Use
@@ -63,6 +80,10 @@ Other commands:
 - `~/.openclaw/skills/workking/scripts/workking_runner.py`
 - `~/.openclaw/skills/workking/scripts/workking_store.py`
 
+Only the `~/.openclaw/skills/workking/scripts/` directory contains executable
+Python scripts. The `~/.openclaw/data/workking/` tree is for runtime data only.
+Do not create or expect runner scripts under the data directory.
+
 ## Local data path
 
 - `~/.openclaw/data/workking/instagram-nepal/`
@@ -80,3 +101,29 @@ example config manually:
 Example source:
 
 - `skill/workking/references/workking.config.example.json`
+
+## Province rotation
+
+The default province order is:
+
+1. `Koshi Province`
+2. `Madhesh Province`
+3. `Bagmati Province`
+4. `Gandaki Province`
+5. `Lumbini Province`
+6. `Karnali Province`
+7. `Sudurpashchim Province`
+
+Default pacing:
+
+- `batch_size`: `5`
+- `candidate_cooldown_seconds`: `300`
+- `provider_retry_cooldown_seconds`: `30`
+
+## Current command path
+
+The invocation path does not change after this fix:
+
+```text
+/workking
+```

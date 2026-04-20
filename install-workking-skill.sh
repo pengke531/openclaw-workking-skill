@@ -2,9 +2,11 @@
 set -euo pipefail
 
 TARGET_ROOT="${1:-$HOME/.openclaw}"
+AGENT_ID="${AGENT_ID:-main}"
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 SKILL_SOURCE="$REPO_ROOT/skill/workking"
 SKILL_TARGET="$TARGET_ROOT/skills/workking"
+PATCH_SCRIPT="$REPO_ROOT/scripts/patch_openclaw_exec.py"
 CONFIG_SOURCE="$SKILL_SOURCE/references/workking.config.example.json"
 CONFIG_ROOT="$TARGET_ROOT/data/workking"
 CONFIG_TARGET="$CONFIG_ROOT/workking.config.json"
@@ -23,6 +25,11 @@ if [ "$WITH_CONFIG" = "1" ]; then
   if [ -f "$CONFIG_SOURCE" ] && [ ! -f "$CONFIG_TARGET" ]; then
     cp "$CONFIG_SOURCE" "$CONFIG_TARGET"
   fi
+fi
+
+if [ -f "$PATCH_SCRIPT" ]; then
+  PATCH_RESULT="$(python3 "$PATCH_SCRIPT" --target-root "$TARGET_ROOT" --agent-id "$AGENT_ID")"
+  echo "[workking] exec patch: $PATCH_RESULT"
 fi
 
 echo "[workking] installed to: $SKILL_TARGET"
