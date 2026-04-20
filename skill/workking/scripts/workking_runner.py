@@ -35,29 +35,6 @@ def seconds_since(started_at: str | None) -> int:
     return int((utc_now() - started).total_seconds())
 
 
-def compute_remaining_province_window_seconds(state: dict[str, Any]) -> int:
-    started = parse_utc(state.get("run_started_at"))
-    if started is None:
-        return max(int(state.get("province_switch_seconds", 1800)), 1)
-    switch_seconds = max(int(state.get("province_switch_seconds", 1800)), 1)
-    elapsed = int((utc_now() - started).total_seconds())
-    consumed = elapsed % switch_seconds
-    remaining = switch_seconds - consumed
-    return remaining if remaining > 0 else switch_seconds
-
-
-def compute_effective_batch_size(
-    configured_batch_size: int,
-    candidate_cooldown_seconds: int,
-    remaining_province_window_seconds: int,
-) -> int:
-    configured_batch_size = max(configured_batch_size, 1)
-    candidate_cooldown_seconds = max(candidate_cooldown_seconds, 1)
-    safe_window = max(remaining_province_window_seconds - 120, candidate_cooldown_seconds)
-    window_based_cap = max(safe_window // candidate_cooldown_seconds, 1)
-    return max(1, min(configured_batch_size, window_based_cap))
-
-
 def resolve_openclaw() -> str:
     for candidate in ("openclaw", "openclaw.cmd", "openclaw.exe"):
         found = shutil.which(candidate)
@@ -185,22 +162,12 @@ def select_provider_chain(provider_order: list[str], probe_timeout_seconds: int)
     return ready_chain, probe_results
 
 
-def compute_active_province(state: dict[str, Any], province_order: list[str]) -> str:
-    if not province_order:
-        return "Nepal"
-    base_cursor = int(state.get("run_province_base_cursor", state.get("province_cursor", 0))) % len(province_order)
-    switch_seconds = max(int(state.get("province_switch_seconds", 1800)), 1)
-    elapsed_windows = seconds_since(state.get("run_started_at")) // switch_seconds
-    return province_order[(base_cursor + elapsed_windows) % len(province_order)]
-
-
 def build_cycle_message(
     provider_order: list[str],
     batch_size: int,
     active_province: str,
     province_order: list[str],
     candidate_cooldown_seconds: int,
-    remaining_province_window_seconds: int,
 ) -> str:
     preferred = provider_order[0]
     fallbacks = ", ".join(provider_order[1:]) if len(provider_order) > 1 else "none"
@@ -212,10 +179,11 @@ def build_cycle_message(
         f"Use a single search cycle of exactly {batch_size} candidates before verification. "
         f"Current province focus: {active_province}. "
         f"Province rotation set: {province_scope}. "
-        "Search only inside the current province focus for this cycle, then let the runner rotate provinces on schedule. "
-        f"You have about {remaining_province_window_seconds} seconds left before the province must rotate. "
+        "Search only inside the current province focus for this entire run. "
+        "Do not do Nepal-wide discovery and then discard out-of-region accounts. "
+        "All search queries, location pages, keyword combinations, and candidate discovery steps must be scoped to the current province first. "
         f"Throttle the workflow so there is at least {candidate_cooldown_seconds} seconds between each individual candidate search or profile verification action. "
-        "This cooldown applies between one creator lookup and the next creator lookup, not between cycles. "
+        "This cooldown applies between one creator lookup and the next creator lookup. "
         f"Preferred crawler/provider this cycle: {preferred}. "
         f"Fallback order if it fails or becomes noisy: {fallbacks}. "
         "Search only Instagram. Keep Nepal only, personal creator only, followers >= 100000, and strict evidence gates. "
@@ -225,6 +193,8 @@ def build_cycle_message(
         "then stop the current cycle immediately so the runner can launch the next cycle. "
         "For duplicates, only update followers and updated_at through record-review. "
         "For unclear evidence, use EVIDENCE_GAP and do not register. "
+        "If a provider reports an Instagram session suspension, login failure, checkpoint, or account disablement, treat that as a provider failure only. "
+        "Do not stop the whole task for that reason. Return control so the runner can switch to the next provider automatically. "
         "Do not produce a chat report; update only the local files."
     )
 
@@ -248,30 +218,76 @@ def run_cycle(message: str, timeout_seconds: int) -> dict[str, Any]:
         }
 
 
+def spawn_background_worker() -> int:
+    cmd = [sys.executable, str(Path(__file__).resolve()), "run-loop"]
+    kwargs: dict[str, Any] = {
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "close_fds": True,
+    }
+    if os.name == "nt":
+        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+    else:
+        kwargs["start_new_session"] = True
+    proc = subprocess.Popen(cmd, **kwargs)
+    return int(proc.pid)
+
+
 def start() -> dict[str, Any]:
+    current = status_state()
+    if current["state"].get("status") == "running":
+        return {
+            "ok": True,
+            "result": "already_running",
+            "state": current["state"],
+            "active_province": current.get("active_province"),
+            "worker_pid": current["state"].get("worker_pid"),
+        }
+
     run_info = store_command("start-run")
+    worker_pid = spawn_background_worker()
+    store_command("attach-worker", "--pid", str(worker_pid))
+    current = status_state()
+    return {
+        "ok": True,
+        "result": "started",
+        "worker_pid": worker_pid,
+        "state": current["state"],
+        "active_province": current.get("active_province"),
+        "data_root": current.get("data_root"),
+    }
+
+
+def run_loop() -> dict[str, Any]:
+    current_info = status_state()
+    if current_info["state"].get("status") != "running":
+        return {"ok": True, "result": "not_running"}
+
+    index_path = Path(current_info["index_path"])
+    run_info = current_info
     index_path = Path(run_info["index_path"])
-    provider_order = list(run_info["provider_order"])
-    province_order = list(run_info.get("province_order", []))
-    batch_size = int(run_info.get("batch_size", 5))
-    candidate_cooldown_seconds = int(run_info.get("candidate_cooldown_seconds", 300))
-    provider_retry_cooldown_seconds = int(run_info.get("provider_retry_cooldown_seconds", 30))
-    single_cycle_timeout_seconds = int(run_info.get("single_cycle_timeout_seconds", 10800))
-    idle_stop_seconds = int(run_info.get("idle_stop_seconds", 10800))
-    max_run_seconds = int(run_info.get("max_run_seconds", 10800))
-    provider_probe_timeout_seconds = int(run_info.get("provider_probe_timeout_seconds", 5))
+    provider_order = list(run_info["state"].get("active_provider_order") or run_info["state"]["provider_order"])
+    province_order = list(run_info["state"].get("province_order", []))
+    batch_size = int(run_info["state"].get("batch_size", 5))
+    candidate_cooldown_seconds = int(run_info["state"].get("candidate_cooldown_seconds", 300))
+    provider_retry_cooldown_seconds = int(run_info["state"].get("provider_retry_cooldown_seconds", 30))
+    single_cycle_timeout_seconds = int(run_info["state"].get("single_cycle_timeout_seconds", 18000))
+    idle_stop_seconds = int(run_info["state"].get("idle_stop_seconds", 18000))
+    max_run_seconds = int(run_info["state"].get("max_run_seconds", 18000))
+    provider_probe_timeout_seconds = int(run_info["state"].get("provider_probe_timeout_seconds", 5))
+    active_province = str(run_info["state"].get("last_active_province") or "Nepal")
 
     cycles: list[dict[str, Any]] = []
 
     while True:
-        current = status_state()["state"]
+        current_info = status_state()
+        current = current_info["state"]
         if current.get("status") != "running":
             return {"ok": True, "state": current, "cycles": cycles}
         if seconds_since(current.get("run_started_at")) >= max_run_seconds:
             finished = store_command("finish-run", "--stop-reason", f"max run window reached ({max_run_seconds} seconds)")
             return {"ok": True, "state": finished["state"], "cycles": cycles}
-
-        active_province = compute_active_province(current, province_order)
 
         ready_chain, probe_results = select_provider_chain(provider_order, provider_probe_timeout_seconds)
         probe_payload_path = Path(run_info["tmp_dir"]) / "provider_probes.json"
@@ -303,29 +319,21 @@ def start() -> dict[str, Any]:
 
         before_count = count_registered_handles(index_path)
         active_chain = ready_chain + [provider for provider in provider_order if provider not in ready_chain]
-        remaining_province_window_seconds = compute_remaining_province_window_seconds(current)
         remaining_run_seconds = max_run_seconds - seconds_since(current.get("run_started_at"))
-        effective_batch_size = compute_effective_batch_size(
-            batch_size,
-            candidate_cooldown_seconds,
-            remaining_province_window_seconds,
-        )
         cycle_timeout_seconds = max(
             60,
             min(
                 single_cycle_timeout_seconds,
-                remaining_province_window_seconds,
                 max(remaining_run_seconds, 60),
             ),
         )
         result = run_cycle(
             build_cycle_message(
                 active_chain,
-                effective_batch_size,
+                batch_size,
                 active_province,
                 province_order,
                 candidate_cooldown_seconds,
-                remaining_province_window_seconds,
             ),
             cycle_timeout_seconds,
         )
@@ -338,9 +346,8 @@ def start() -> dict[str, Any]:
             "finished_at": utc_now().isoformat().replace("+00:00", "Z"),
             "provider": ready_chain[0],
             "province": active_province,
-            "batch_size": effective_batch_size,
+            "batch_size": batch_size,
             "candidate_cooldown_seconds": candidate_cooldown_seconds,
-            "remaining_province_window_seconds": remaining_province_window_seconds,
             "new_unique": new_unique,
             "timed_out": bool(result.get("timed_out")),
             "returncode": result.get("returncode"),
@@ -351,7 +358,7 @@ def start() -> dict[str, Any]:
 
         if new_unique > 0:
             provider_order = provider_order[1:] + provider_order[:1]
-            time.sleep(1)
+            time.sleep(candidate_cooldown_seconds)
             continue
 
         refreshed = status_state()["state"]
@@ -362,7 +369,7 @@ def start() -> dict[str, Any]:
             return {"ok": True, "state": finished["state"], "cycles": cycles}
 
         provider_order = provider_order[1:] + provider_order[:1]
-        time.sleep(1)
+        time.sleep(candidate_cooldown_seconds)
 
 
 def stop() -> dict[str, Any]:
@@ -381,6 +388,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("start")
+    sub.add_parser("run-loop")
     sub.add_parser("stop")
     sub.add_parser("status")
     export_parser = sub.add_parser("export")
@@ -390,6 +398,8 @@ def main() -> int:
     try:
         if args.command == "start":
             result = start()
+        elif args.command == "run-loop":
+            result = run_loop()
         elif args.command == "stop":
             result = stop()
         elif args.command == "status":

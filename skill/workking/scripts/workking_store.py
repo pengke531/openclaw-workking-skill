@@ -16,12 +16,6 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def parse_utc(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
-
-
 def default_data_root() -> Path:
     state_dir = os.environ.get("OPENCLAW_STATE_DIR")
     if state_dir:
@@ -71,11 +65,10 @@ def load_config() -> dict[str, Any]:
             "batch_size": 5,
             "candidate_cooldown_seconds": 300,
             "provider_retry_cooldown_seconds": 30,
-            "single_cycle_timeout_seconds": 10800,
-            "idle_stop_seconds": 10800,
-            "max_run_seconds": 10800,
+            "single_cycle_timeout_seconds": 18000,
+            "idle_stop_seconds": 18000,
+            "max_run_seconds": 18000,
             "provider_probe_timeout_seconds": 5,
-            "province_switch_seconds": 1800,
             "province_order": [
                 "Koshi Province",
                 "Madhesh Province",
@@ -167,18 +160,18 @@ def load_state() -> dict[str, Any]:
             "status": "idle",
             "provider_cursor": 0,
             "provider_order": list(config.get("provider_order", [])),
+            "active_provider_order": list(config.get("provider_order", [])),
             "batch_size": int(config.get("batch_size", 5)),
             "candidate_cooldown_seconds": int(config.get("candidate_cooldown_seconds", 300)),
             "provider_retry_cooldown_seconds": int(config.get("provider_retry_cooldown_seconds", 30)),
-            "single_cycle_timeout_seconds": int(config.get("single_cycle_timeout_seconds", 10800)),
-            "idle_stop_seconds": int(config.get("idle_stop_seconds", 10800)),
-            "max_run_seconds": int(config.get("max_run_seconds", 10800)),
+            "single_cycle_timeout_seconds": int(config.get("single_cycle_timeout_seconds", 18000)),
+            "idle_stop_seconds": int(config.get("idle_stop_seconds", 18000)),
+            "max_run_seconds": int(config.get("max_run_seconds", 18000)),
             "provider_probe_timeout_seconds": int(config.get("provider_probe_timeout_seconds", 5)),
             "province_order": list(config.get("province_order", [])),
             "province_cursor": 0,
-            "province_switch_seconds": int(config.get("province_switch_seconds", 1800)),
-            "run_province_base_cursor": 0,
             "last_active_province": None,
+            "worker_pid": None,
             "run_started_at": None,
             "run_finished_at": None,
             "last_unique_qualified_at": None,
@@ -194,40 +187,6 @@ def load_state() -> dict[str, Any]:
 def save_state(state: dict[str, Any]) -> None:
     state["updated_at"] = utc_now()
     write_json(STATE_PATH, state)
-
-
-def compute_runtime_province(state: dict[str, Any]) -> str | None:
-    provinces = list(state.get("province_order", []))
-    if not provinces:
-        return None
-    run_started_at = parse_utc(state.get("run_started_at"))
-    if run_started_at is None:
-        cursor = int(state.get("province_cursor", 0)) % len(provinces)
-        return provinces[cursor]
-    switch_seconds = max(int(state.get("province_switch_seconds", 1800)), 1)
-    base_cursor = int(state.get("run_province_base_cursor", state.get("province_cursor", 0))) % len(provinces)
-    elapsed_windows = int((datetime.now(timezone.utc) - run_started_at).total_seconds() // switch_seconds)
-    return provinces[(base_cursor + elapsed_windows) % len(provinces)]
-
-
-def compute_remaining_run_seconds(state: dict[str, Any]) -> int | None:
-    run_started_at = parse_utc(state.get("run_started_at"))
-    if run_started_at is None:
-        return None
-    max_run_seconds = max(int(state.get("max_run_seconds", 10800)), 1)
-    remaining = max_run_seconds - int((datetime.now(timezone.utc) - run_started_at).total_seconds())
-    return max(remaining, 0)
-
-
-def compute_remaining_province_window_seconds(state: dict[str, Any]) -> int | None:
-    run_started_at = parse_utc(state.get("run_started_at"))
-    if run_started_at is None:
-        return None
-    switch_seconds = max(int(state.get("province_switch_seconds", 1800)), 1)
-    elapsed = int((datetime.now(timezone.utc) - run_started_at).total_seconds())
-    consumed = elapsed % switch_seconds
-    remaining = switch_seconds - consumed
-    return remaining if remaining > 0 else switch_seconds
 
 
 def load_pending() -> dict[str, Any]:
@@ -456,12 +415,14 @@ def start_run() -> dict[str, Any]:
         raise ValueError("province_order cannot be empty")
     province_cursor = int(state.get("province_cursor", 0)) % len(provinces)
     state["provider_cursor"] = (cursor + 1) % len(providers)
+    state["active_provider_order"] = rotated
     state["status"] = "running"
     state["run_started_at"] = utc_now()
     state["run_finished_at"] = None
     state["last_unique_qualified_at"] = state["run_started_at"]
-    state["run_province_base_cursor"] = province_cursor
     state["last_active_province"] = provinces[province_cursor]
+    state["province_cursor"] = (province_cursor + 1) % len(provinces)
+    state["worker_pid"] = None
     state["last_stop_reason"] = None
     state["total_cycles"] = 0
     state["total_new_unique"] = 0
@@ -482,7 +443,6 @@ def start_run() -> dict[str, Any]:
         "idle_stop_seconds": state["idle_stop_seconds"],
         "max_run_seconds": state["max_run_seconds"],
         "provider_probe_timeout_seconds": state["provider_probe_timeout_seconds"],
-        "province_switch_seconds": state["province_switch_seconds"],
         "run_started_at": state["run_started_at"],
         "last_unique_qualified_at": state["last_unique_qualified_at"],
     }
@@ -490,17 +450,10 @@ def start_run() -> dict[str, Any]:
 
 def finish_run(stop_reason: str) -> dict[str, Any]:
     state = load_state()
-    provinces = list(state.get("province_order", []))
-    run_started_at = parse_utc(state.get("run_started_at"))
-    if provinces and run_started_at is not None:
-        switch_seconds = max(int(state.get("province_switch_seconds", 1800)), 1)
-        base_cursor = int(state.get("run_province_base_cursor", state.get("province_cursor", 0))) % len(provinces)
-        elapsed_windows = int((datetime.now(timezone.utc) - run_started_at).total_seconds() // switch_seconds)
-        next_cursor = (base_cursor + elapsed_windows + 1) % len(provinces)
-        state["province_cursor"] = next_cursor
-        state["last_active_province"] = provinces[(base_cursor + elapsed_windows) % len(provinces)]
     state["status"] = "stopped"
+    state["active_provider_order"] = list(state.get("provider_order", []))
     state["run_finished_at"] = utc_now()
+    state["worker_pid"] = None
     state["last_stop_reason"] = stop_reason
     save_state(state)
     return {"ok": True, "state": state}
@@ -513,9 +466,6 @@ def stop_run() -> dict[str, Any]:
 def complete_cycle(new_unique: int) -> dict[str, Any]:
     state = load_state()
     state["total_cycles"] = int(state.get("total_cycles", 0)) + 1
-    active_province = compute_runtime_province(state)
-    if active_province:
-        state["last_active_province"] = active_province
     if new_unique > 0:
         state["total_new_unique"] = int(state.get("total_new_unique", 0)) + new_unique
         state["last_unique_qualified_at"] = utc_now()
@@ -530,23 +480,30 @@ def update_provider_probes(results: list[dict[str, Any]]) -> dict[str, Any]:
     return {"ok": True, "state": state}
 
 
+def attach_worker(pid: int) -> dict[str, Any]:
+    state = load_state()
+    state["worker_pid"] = pid
+    save_state(state)
+    return {"ok": True, "state": state}
+
+
 def status() -> dict[str, Any]:
     ensure_dirs()
     state = load_state()
-    active_province = compute_runtime_province(state)
-    remaining_run_seconds = compute_remaining_run_seconds(state)
-    remaining_province_window_seconds = compute_remaining_province_window_seconds(state)
-    if active_province:
-        state["last_active_province"] = active_province
-        save_state(state)
+    active_province = state.get("last_active_province")
+    remaining_run_seconds = None
+    if state.get("run_started_at"):
+        started = datetime.fromisoformat(str(state["run_started_at"]).replace("Z", "+00:00"))
+        remaining_run_seconds = max(int(state.get("max_run_seconds", 18000)) - int((datetime.now(timezone.utc) - started).total_seconds()), 0)
     return {
         "ok": True,
         "data_root": str(DATA_ROOT),
         "index_path": str(INDEX_PATH),
+        "pending_path": str(PENDING_PATH),
+        "tmp_dir": str(TMP_DIR),
         "state": state,
         "active_province": active_province,
         "remaining_run_seconds": remaining_run_seconds,
-        "remaining_province_window_seconds": remaining_province_window_seconds,
         "registered_count": len({k for k in load_index().get("records", {}).keys() if "instagram.com/" not in k}),
     }
 
@@ -595,6 +552,8 @@ def main() -> int:
     complete.add_argument("--new-unique", type=int, required=True)
     probes = sub.add_parser("update-provider-probes")
     probes.add_argument("--payload", required=True)
+    worker = sub.add_parser("attach-worker")
+    worker.add_argument("--pid", type=int, required=True)
 
     uq = sub.add_parser("upsert-qualified")
     uq.add_argument("--payload", required=True)
@@ -623,6 +582,8 @@ def main() -> int:
             if not isinstance(payload, list):
                 raise ValueError("probe payload must be a JSON list")
             result = update_provider_probes(payload)
+        elif args.command == "attach-worker":
+            result = attach_worker(args.pid)
         elif args.command == "upsert-qualified":
             payload = load_payload(Path(args.payload))
             validate_payload(payload)

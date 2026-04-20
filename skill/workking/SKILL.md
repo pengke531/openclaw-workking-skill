@@ -99,7 +99,9 @@ Current workflow requirements:
 - store every newly qualified non-duplicate creator immediately
 - always read the local registry first and ignore existing creators
 - rotate providers on each new run and skip unhealthy providers automatically
-- run for up to 3 hours total
-- rotate Nepal province focus every 30 minutes
+- run for up to 5 hours total
+- use one Nepal province per run
+- on the next new run, advance to the next province in the fixed province list
+- treat one suspended Instagram session as one provider failure, not as a global blocker
 - keep Instagram-only, Nepal-only, personal-creator-only, `followers >= 100000`
 - keep `EVIDENCE_GAP` as a hard block

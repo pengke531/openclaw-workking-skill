@@ -28,9 +28,9 @@ It is designed for:
 - per-candidate cooldown to reduce creator lookup frequency
 - immediate save on every new qualified creator
 - automatic fresh-cycle restart after each new qualified creator
-- up to 3 hour run window
-- 3 hour no-new-creator stop rule
-- Nepal province rotation every 30 minutes
+- up to 5 hour run window
+- 5 hour no-new-creator stop rule
+- one Nepal province per run, rotating to the next province on the next start
 
 ## Install
 
@@ -119,6 +119,7 @@ Default pacing:
 - `batch_size`: `5`
 - `candidate_cooldown_seconds`: `300`
 - `provider_retry_cooldown_seconds`: `30`
+- `max_run_seconds`: `18000`
 
 ## Current command path
 
