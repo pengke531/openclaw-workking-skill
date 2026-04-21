@@ -24,6 +24,7 @@ It is designed for:
 - fast provider health probes before each cycle
 - automatic provider skip when unhealthy
 - `openclaw-core` builtin fallback for plain OpenClaw installs
+- each cycle actively opens the current province search surface in the managed OpenClaw browser
 - bounded candidate cap per province window
 - per-candidate cooldown to reduce creator lookup frequency
 - immediate save on every new qualified creator
@@ -86,6 +87,11 @@ Fixed province commands:
 /workking6  # Karnali Province
 /workking7  # Sudurpashchim Province
 ```
+
+Each run now does two visible things:
+
+- starts the managed OpenClaw browser profile if needed
+- opens the current province Instagram search surface before the verification cycle
 
 ## Installed path
 

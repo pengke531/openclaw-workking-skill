@@ -183,6 +183,7 @@ def load_state() -> dict[str, Any]:
         "province_cursor": 0,
         "last_active_province": None,
         "worker_pid": None,
+        "cycle_pid": None,
         "run_started_at": None,
         "run_finished_at": None,
         "last_unique_qualified_at": None,
@@ -476,6 +477,7 @@ def finish_run(stop_reason: str) -> dict[str, Any]:
     state["active_provider_order"] = list(state.get("provider_order", []))
     state["run_finished_at"] = utc_now()
     state["worker_pid"] = None
+    state["cycle_pid"] = None
     state["last_stop_reason"] = stop_reason
     save_state(state)
     return {"ok": True, "state": state}
@@ -505,6 +507,13 @@ def update_provider_probes(results: list[dict[str, Any]]) -> dict[str, Any]:
 def attach_worker(pid: int) -> dict[str, Any]:
     state = load_state()
     state["worker_pid"] = pid
+    save_state(state)
+    return {"ok": True, "state": state}
+
+
+def attach_cycle(pid: int | None) -> dict[str, Any]:
+    state = load_state()
+    state["cycle_pid"] = pid
     save_state(state)
     return {"ok": True, "state": state}
 
@@ -578,6 +587,8 @@ def main() -> int:
     probes.add_argument("--payload", required=True)
     worker = sub.add_parser("attach-worker")
     worker.add_argument("--pid", type=int, required=True)
+    cycle = sub.add_parser("attach-cycle")
+    cycle.add_argument("--pid", type=int)
 
     uq = sub.add_parser("upsert-qualified")
     uq.add_argument("--payload", required=True)
@@ -608,6 +619,8 @@ def main() -> int:
             result = update_provider_probes(payload)
         elif args.command == "attach-worker":
             result = attach_worker(args.pid)
+        elif args.command == "attach-cycle":
+            result = attach_cycle(args.pid)
         elif args.command == "upsert-qualified":
             payload = load_payload(Path(args.payload))
             validate_payload(payload)

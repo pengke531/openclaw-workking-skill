@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import time
+from urllib import parse as urlparse
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -66,6 +67,47 @@ def count_registered_handles(index_path: Path) -> int:
     data = json.loads(index_path.read_text(encoding="utf-8"))
     records = data.get("records", {})
     return len([key for key in records.keys() if "instagram.com/" not in str(key)])
+
+
+def terminate_pid(pid: int | None) -> None:
+    if not pid:
+        return
+    try:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+        else:
+            os.killpg(pid, 9)
+    except Exception:
+        return
+
+
+def browser_command(*args: str, timeout_seconds: int = 60) -> subprocess.CompletedProcess[str]:
+    cmd = [resolve_openclaw(), "browser", "--browser-profile", "openclaw", *args]
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_seconds, check=False)
+
+
+def province_browser_url(active_province: str) -> str:
+    query = urlparse.quote_plus(f"Instagram creators in {active_province} Nepal")
+    return f"https://www.instagram.com/explore/search/keyword/?q={query}"
+
+
+def ensure_browser_search_surface(active_province: str) -> dict[str, Any]:
+    start_result = browser_command("start", timeout_seconds=90)
+    open_url = province_browser_url(active_province)
+    open_result = browser_command("open", open_url, timeout_seconds=90)
+    return {
+        "start_returncode": start_result.returncode,
+        "open_returncode": open_result.returncode,
+        "open_url": open_url,
+        "start_stderr": (start_result.stderr or start_result.stdout).strip(),
+        "open_stderr": (open_result.stderr or open_result.stdout).strip(),
+    }
 
 
 def list_available_skills(timeout_seconds: int) -> set[str]:
@@ -204,20 +246,58 @@ def build_cycle_message(
 def run_cycle(message: str, timeout_seconds: int) -> dict[str, Any]:
     def invoke(cmd: list[str], route: str) -> dict[str, Any]:
         try:
-            completed = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_seconds, check=False)
-            return {
-                "returncode": completed.returncode,
-                "stdout": completed.stdout.strip(),
-                "stderr": completed.stderr.strip(),
-                "timed_out": False,
-                "route": route,
-            }
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            store_command("attach-cycle", "--pid", str(proc.pid))
+            start_time = time.time()
+            while True:
+                if proc.poll() is not None:
+                    stdout, stderr = proc.communicate()
+                    store_command("attach-cycle")
+                    return {
+                        "returncode": proc.returncode,
+                        "stdout": (stdout or "").strip(),
+                        "stderr": (stderr or "").strip(),
+                        "timed_out": False,
+                        "route": route,
+                    }
+                if time.time() - start_time >= timeout_seconds:
+                    terminate_pid(proc.pid)
+                    store_command("attach-cycle")
+                    return {
+                        "returncode": 124,
+                        "stdout": "",
+                        "stderr": f"{route} exceeded timeout of {timeout_seconds} seconds",
+                        "timed_out": True,
+                        "route": route,
+                    }
+                current_state = status_state()["state"]
+                if current_state.get("status") != "running":
+                    terminate_pid(proc.pid)
+                    store_command("attach-cycle")
+                    return {
+                        "returncode": 143,
+                        "stdout": "",
+                        "stderr": f"{route} interrupted by stop request",
+                        "timed_out": False,
+                        "route": route,
+                    }
+                time.sleep(1)
         except subprocess.TimeoutExpired:
+            store_command("attach-cycle")
             return {
                 "returncode": 124,
                 "stdout": "",
                 "stderr": f"{route} exceeded timeout of {timeout_seconds} seconds",
                 "timed_out": True,
+                "route": route,
+            }
+        except Exception as exc:
+            store_command("attach-cycle")
+            return {
+                "returncode": 1,
+                "stdout": "",
+                "stderr": f"{route} failed before completion: {exc}",
+                "timed_out": False,
                 "route": route,
             }
 
@@ -373,6 +453,7 @@ def run_loop() -> dict[str, Any]:
         before_count = count_registered_handles(index_path)
         active_chain = ready_chain + [provider for provider in provider_order if provider not in ready_chain]
         remaining_run_seconds = max_run_seconds - seconds_since(current.get("run_started_at"))
+        browser_setup = ensure_browser_search_surface(active_province)
         cycle_timeout_seconds = max(
             60,
             min(
@@ -406,6 +487,8 @@ def run_loop() -> dict[str, Any]:
             "timed_out": bool(result.get("timed_out")),
             "returncode": result.get("returncode"),
             "stderr": result.get("stderr", ""),
+            "route": result.get("route"),
+            "browser_setup": browser_setup,
             "probe_results": probe_results,
         }
         cycles.append(cycle_summary)
@@ -427,6 +510,9 @@ def run_loop() -> dict[str, Any]:
 
 
 def stop() -> dict[str, Any]:
+    current = status_state()["state"]
+    terminate_pid(current.get("cycle_pid"))
+    terminate_pid(current.get("worker_pid"))
     return store_command("stop-run")
 
 
