@@ -14,6 +14,13 @@ fi
 
 for path in \
   "$TARGET_ROOT/skills/workking/SKILL.md" \
+  "$TARGET_ROOT/skills/workking1/SKILL.md" \
+  "$TARGET_ROOT/skills/workking2/SKILL.md" \
+  "$TARGET_ROOT/skills/workking3/SKILL.md" \
+  "$TARGET_ROOT/skills/workking4/SKILL.md" \
+  "$TARGET_ROOT/skills/workking5/SKILL.md" \
+  "$TARGET_ROOT/skills/workking6/SKILL.md" \
+  "$TARGET_ROOT/skills/workking7/SKILL.md" \
   "$TARGET_ROOT/skills/workking/scripts/workking_runner.py" \
   "$TARGET_ROOT/skills/workking/scripts/workking_store.py"
 do

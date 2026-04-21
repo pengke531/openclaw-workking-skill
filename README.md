@@ -10,7 +10,7 @@ its Python runner with `exec`. By default it patches the `main` agent.
 After install, a user can start it directly with:
 
 ```text
-/workking
+/workking1
 ```
 
 It is designed for:
@@ -28,9 +28,9 @@ It is designed for:
 - per-candidate cooldown to reduce creator lookup frequency
 - immediate save on every new qualified creator
 - automatic fresh-cycle restart after each new qualified creator
-- up to 5 hour run window
-- 5 hour no-new-creator stop rule
-- one Nepal province per run, rotating to the next province on the next start
+- up to 3 hour run window
+- 3 hour no-new-creator stop rule
+- fixed province start commands `/workking1` through `/workking7`
 
 ## Install
 
@@ -63,7 +63,7 @@ AGENT_ID=a02 ./install.sh
 Open a new OpenClaw session, then run:
 
 ```text
-/workking
+/workking1
 ```
 
 Other commands:
@@ -74,9 +74,28 @@ Other commands:
 /workking export
 ```
 
+Fixed province commands:
+
+```text
+/workking1  # Koshi Province
+/workking2  # Madhesh Province
+/workking3  # Bagmati Province
+/workking4  # Gandaki Province
+/workking5  # Lumbini Province
+/workking6  # Karnali Province
+/workking7  # Sudurpashchim Province
+```
+
 ## Installed path
 
 - `~/.openclaw/skills/workking/SKILL.md`
+- `~/.openclaw/skills/workking1/SKILL.md`
+- `~/.openclaw/skills/workking2/SKILL.md`
+- `~/.openclaw/skills/workking3/SKILL.md`
+- `~/.openclaw/skills/workking4/SKILL.md`
+- `~/.openclaw/skills/workking5/SKILL.md`
+- `~/.openclaw/skills/workking6/SKILL.md`
+- `~/.openclaw/skills/workking7/SKILL.md`
 - `~/.openclaw/skills/workking/scripts/workking_runner.py`
 - `~/.openclaw/skills/workking/scripts/workking_store.py`
 
@@ -102,9 +121,9 @@ Example source:
 
 - `skill/workking/references/workking.config.example.json`
 
-## Province rotation
+## Province commands
 
-The default province order is:
+The fixed province command mapping is:
 
 1. `Koshi Province`
 2. `Madhesh Province`
@@ -119,12 +138,18 @@ Default pacing:
 - `batch_size`: `5`
 - `candidate_cooldown_seconds`: `300`
 - `provider_retry_cooldown_seconds`: `30`
-- `max_run_seconds`: `18000`
+- `max_run_seconds`: `10800`
 
 ## Current command path
 
-The invocation path does not change after this fix:
+The primary start commands after this fix are:
 
 ```text
-/workking
+/workking1
+/workking2
+/workking3
+/workking4
+/workking5
+/workking6
+/workking7
 ```

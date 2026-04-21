@@ -4,22 +4,36 @@ set -euo pipefail
 TARGET_ROOT="${1:-$HOME/.openclaw}"
 AGENT_ID="${AGENT_ID:-main}"
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
-SKILL_SOURCE="$REPO_ROOT/skill/workking"
-SKILL_TARGET="$TARGET_ROOT/skills/workking"
+SKILLS_SOURCE_ROOT="$REPO_ROOT/skill"
 PATCH_SCRIPT="$REPO_ROOT/scripts/patch_openclaw_exec.py"
-CONFIG_SOURCE="$SKILL_SOURCE/references/workking.config.example.json"
+CONFIG_SOURCE="$SKILLS_SOURCE_ROOT/workking/references/workking.config.example.json"
 CONFIG_ROOT="$TARGET_ROOT/data/workking"
 CONFIG_TARGET="$CONFIG_ROOT/workking.config.json"
 WITH_CONFIG="${WITH_CONFIG:-0}"
 
-if [ ! -d "$SKILL_SOURCE" ]; then
-  echo "missing skill source: $SKILL_SOURCE"
+if [ ! -d "$SKILLS_SOURCE_ROOT" ]; then
+  echo "missing skills source root: $SKILLS_SOURCE_ROOT"
   exit 1
 fi
 
-mkdir -p "$(dirname "$SKILL_TARGET")"
-rm -rf "$SKILL_TARGET"
-cp -R "$SKILL_SOURCE" "$SKILL_TARGET"
+mkdir -p "$TARGET_ROOT/skills"
+FOUND_SKILL=0
+for skill_dir in "$SKILLS_SOURCE_ROOT"/workking*; do
+  if [ -d "$skill_dir" ]; then
+    FOUND_SKILL=1
+    skill_name="$(basename "$skill_dir")"
+    skill_target="$TARGET_ROOT/skills/$skill_name"
+    rm -rf "$skill_target"
+    cp -R "$skill_dir" "$skill_target"
+    echo "[workking] installed skill: $skill_name -> $skill_target"
+  fi
+done
+
+if [ "$FOUND_SKILL" = "0" ]; then
+  echo "no workking skill directories found under: $SKILLS_SOURCE_ROOT"
+  exit 1
+fi
+
 if [ "$WITH_CONFIG" = "1" ]; then
   mkdir -p "$CONFIG_ROOT"
   if [ -f "$CONFIG_SOURCE" ] && [ ! -f "$CONFIG_TARGET" ]; then
@@ -32,8 +46,7 @@ if [ -f "$PATCH_SCRIPT" ]; then
   echo "[workking] exec patch: $PATCH_RESULT"
 fi
 
-echo "[workking] installed to: $SKILL_TARGET"
-echo "[workking] next: start a new OpenClaw session, then run /workking"
+echo "[workking] next: start a new OpenClaw session, then run /workking1 through /workking7"
 if [ "$WITH_CONFIG" = "1" ]; then
   echo "[workking] optional config copied to: $CONFIG_TARGET"
 fi

@@ -12,12 +12,9 @@ discovery in Nepal.
 Supported commands:
 
 - `/workking`
-- `/workking start`
 - `/workking status`
 - `/workking stop`
 - `/workking export`
-
-Treat omitted input as `start`.
 
 ## Non-negotiable rules
 
@@ -57,7 +54,19 @@ Never use:
 
 ## Start behavior
 
-For `/workking` or `/workking start`, run:
+For bare `/workking`, do not start a search run automatically. Return the fixed province commands:
+
+- `/workking1` = `Koshi Province`
+- `/workking2` = `Madhesh Province`
+- `/workking3` = `Bagmati Province`
+- `/workking4` = `Gandaki Province`
+- `/workking5` = `Lumbini Province`
+- `/workking6` = `Karnali Province`
+- `/workking7` = `Sudurpashchim Province`
+
+Only mention `/workking status`, `/workking stop`, and `/workking export` as the control commands.
+
+Never run this legacy command automatically:
 
 ```powershell
 python {baseDir}/scripts/workking_runner.py start
@@ -99,9 +108,9 @@ Current workflow requirements:
 - store every newly qualified non-duplicate creator immediately
 - always read the local registry first and ignore existing creators
 - rotate providers on each new run and skip unhealthy providers automatically
-- run for up to 5 hours total
-- use one Nepal province per run
-- on the next new run, advance to the next province in the fixed province list
+- run for up to 3 hours total
+- start runs only through `/workking1` to `/workking7`
+- each of those commands is locked to one fixed Nepal province
 - treat one suspended Instagram session as one provider failure, not as a global blocker
 - keep Instagram-only, Nepal-only, personal-creator-only, `followers >= 100000`
 - keep `EVIDENCE_GAP` as a hard block

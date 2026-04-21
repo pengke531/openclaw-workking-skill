@@ -5,11 +5,17 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$skillRoot = Join-Path (Join-Path $TargetRoot "skills") "workking"
 $required = @(
-  (Join-Path $skillRoot "SKILL.md"),
-  (Join-Path (Join-Path $skillRoot "scripts") "workking_runner.py"),
-  (Join-Path (Join-Path $skillRoot "scripts") "workking_store.py")
+  (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "workking") "SKILL.md"),
+  (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "workking1") "SKILL.md"),
+  (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "workking2") "SKILL.md"),
+  (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "workking3") "SKILL.md"),
+  (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "workking4") "SKILL.md"),
+  (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "workking5") "SKILL.md"),
+  (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "workking6") "SKILL.md"),
+  (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "workking7") "SKILL.md"),
+  (Join-Path (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "workking") "scripts") "workking_runner.py"),
+  (Join-Path (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "workking") "scripts") "workking_store.py")
 )
 
 foreach ($path in $required) {
@@ -42,4 +48,4 @@ if (-not ($agent.tools.alsoAllow -contains "exec")) {
 }
 
 $env:OPENCLAW_STATE_DIR = $TargetRoot
-python (Join-Path (Join-Path $skillRoot "scripts") "workking_store.py") status | Out-Host
+python (Join-Path (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "workking") "scripts") "workking_store.py") status | Out-Host

@@ -168,14 +168,15 @@ def build_cycle_message(
     active_province: str,
     province_order: list[str],
     candidate_cooldown_seconds: int,
+    index_path: str,
 ) -> str:
     preferred = provider_order[0]
     fallbacks = ", ".join(provider_order[1:]) if len(provider_order) > 1 else "none"
     province_scope = ", ".join(province_order) if province_order else "Nepal"
     return (
         "Use the workking skill rules for Nepal Instagram creator discovery. "
-        "Before searching, read the local registry index from ~/.openclaw/data/workking/instagram-nepal/registry/index.json "
-        "or the OPENCLAW_STATE_DIR equivalent and ignore every stored handle and profile URL. "
+        f"Before searching, read the local registry index from {index_path} "
+        "and ignore every stored handle and profile URL. "
         f"Use a single search cycle of exactly {batch_size} candidates before verification. "
         f"Current province focus: {active_province}. "
         f"Province rotation set: {province_scope}. "
@@ -234,7 +235,7 @@ def spawn_background_worker() -> int:
     return int(proc.pid)
 
 
-def start() -> dict[str, Any]:
+def start(province: str | None = None, trigger_command: str | None = None) -> dict[str, Any]:
     current = status_state()
     if current["state"].get("status") == "running":
         return {
@@ -245,7 +246,12 @@ def start() -> dict[str, Any]:
             "worker_pid": current["state"].get("worker_pid"),
         }
 
-    run_info = store_command("start-run")
+    cmd = ["start-run"]
+    if province:
+        cmd.extend(["--province", province])
+    if trigger_command:
+        cmd.extend(["--trigger-command", trigger_command])
+    run_info = store_command(*cmd)
     worker_pid = spawn_background_worker()
     store_command("attach-worker", "--pid", str(worker_pid))
     current = status_state()
@@ -272,9 +278,9 @@ def run_loop() -> dict[str, Any]:
     batch_size = int(run_info["state"].get("batch_size", 5))
     candidate_cooldown_seconds = int(run_info["state"].get("candidate_cooldown_seconds", 300))
     provider_retry_cooldown_seconds = int(run_info["state"].get("provider_retry_cooldown_seconds", 30))
-    single_cycle_timeout_seconds = int(run_info["state"].get("single_cycle_timeout_seconds", 18000))
-    idle_stop_seconds = int(run_info["state"].get("idle_stop_seconds", 18000))
-    max_run_seconds = int(run_info["state"].get("max_run_seconds", 18000))
+    single_cycle_timeout_seconds = int(run_info["state"].get("single_cycle_timeout_seconds", 10800))
+    idle_stop_seconds = int(run_info["state"].get("idle_stop_seconds", 10800))
+    max_run_seconds = int(run_info["state"].get("max_run_seconds", 10800))
     provider_probe_timeout_seconds = int(run_info["state"].get("provider_probe_timeout_seconds", 5))
     active_province = str(run_info["state"].get("last_active_province") or "Nepal")
 
@@ -334,6 +340,7 @@ def run_loop() -> dict[str, Any]:
                 active_province,
                 province_order,
                 candidate_cooldown_seconds,
+                str(index_path),
             ),
             cycle_timeout_seconds,
         )
@@ -387,7 +394,9 @@ def export(fmt: str) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("start")
+    start_parser = sub.add_parser("start")
+    start_parser.add_argument("--province")
+    start_parser.add_argument("--trigger-command")
     sub.add_parser("run-loop")
     sub.add_parser("stop")
     sub.add_parser("status")
@@ -397,7 +406,7 @@ def main() -> int:
 
     try:
         if args.command == "start":
-            result = start()
+            result = start(args.province, args.trigger_command)
         elif args.command == "run-loop":
             result = run_loop()
         elif args.command == "stop":

@@ -7,22 +7,31 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$skillSource = Join-Path $repoRoot "skill\\workking"
-$skillTarget = Join-Path $TargetRoot "skills\\workking"
+$skillsSourceRoot = Join-Path $repoRoot "skill"
+$skillDirs = Get-ChildItem -Directory $skillsSourceRoot | Where-Object { $_.Name -like "workking*" }
 $patchScript = Join-Path $repoRoot "scripts\\patch_openclaw_exec.py"
-$configSource = Join-Path $skillSource "references\\workking.config.example.json"
+$configSource = Join-Path $skillsSourceRoot "workking\\references\\workking.config.example.json"
 $configRoot = Join-Path (Join-Path $TargetRoot "data") "workking"
 $configTarget = Join-Path $configRoot "workking.config.json"
 
-if (-not (Test-Path $skillSource)) {
-  throw "missing skill source: $skillSource"
+if (-not (Test-Path $skillsSourceRoot)) {
+  throw "missing skills source root: $skillsSourceRoot"
 }
 
-New-Item -ItemType Directory -Force -Path (Split-Path -Parent $skillTarget) | Out-Null
-if (Test-Path $skillTarget) {
-  Remove-Item -Recurse -Force $skillTarget
+if (-not $skillDirs) {
+  throw "no workking skill directories found under: $skillsSourceRoot"
 }
-Copy-Item -Recurse -Force $skillSource $skillTarget
+
+New-Item -ItemType Directory -Force -Path (Join-Path $TargetRoot "skills") | Out-Null
+foreach ($dir in $skillDirs) {
+  $skillTarget = Join-Path (Join-Path $TargetRoot "skills") $dir.Name
+  if (Test-Path $skillTarget) {
+    Remove-Item -Recurse -Force $skillTarget
+  }
+  Copy-Item -Recurse -Force $dir.FullName $skillTarget
+  Write-Host "[workking] installed skill:" $dir.Name "->" $skillTarget
+}
+
 if ($WithConfig) {
   New-Item -ItemType Directory -Force -Path $configRoot | Out-Null
   if ((Test-Path $configSource) -and -not (Test-Path $configTarget)) {
@@ -35,8 +44,7 @@ if (Test-Path $patchScript) {
   Write-Host "[workking] exec patch:" $patchResult
 }
 
-Write-Host "[workking] installed to: $skillTarget"
-Write-Host "[workking] next: start a new OpenClaw session, then run /workking"
+Write-Host "[workking] next: start a new OpenClaw session, then run /workking1 through /workking7"
 if ($WithConfig) {
   Write-Host "[workking] optional config copied to: $configTarget"
 }

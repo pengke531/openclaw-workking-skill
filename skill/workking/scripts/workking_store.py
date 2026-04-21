@@ -16,18 +16,25 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def default_data_root() -> Path:
-    state_dir = os.environ.get("OPENCLAW_STATE_DIR")
+def infer_openclaw_root() -> Path:
+    state_dir = os.environ.get("OPENCLAW_STATE_DIR", "").strip()
     if state_dir:
-        return Path(state_dir).expanduser().resolve() / "data" / "workking" / "instagram-nepal"
-    return Path.home() / ".openclaw" / "data" / "workking" / "instagram-nepal"
+        return Path(state_dir).expanduser().resolve()
+
+    script_path = Path(__file__).resolve()
+    for candidate in (script_path.parent, *script_path.parents):
+        if candidate.name == ".openclaw":
+            return candidate
+
+    return Path.home() / ".openclaw"
+
+
+def default_data_root() -> Path:
+    return infer_openclaw_root() / "data" / "workking" / "instagram-nepal"
 
 
 def default_config_root() -> Path:
-    state_dir = os.environ.get("OPENCLAW_STATE_DIR")
-    if state_dir:
-        return Path(state_dir).expanduser().resolve() / "data" / "workking"
-    return Path.home() / ".openclaw" / "data" / "workking"
+    return infer_openclaw_root() / "data" / "workking"
 
 
 DATA_ROOT = default_data_root()
@@ -51,36 +58,34 @@ def ensure_dirs() -> None:
 
 def load_config() -> dict[str, Any]:
     ensure_dirs()
-    return read_json(
-        CONFIG_PATH,
-        {
-            "provider_order": [
-                "agent-reach",
-                "autoglm-browser-agent",
-                "search",
-                "openclaw-core",
-                "apify",
-                "brightdata",
-            ],
-            "batch_size": 5,
-            "candidate_cooldown_seconds": 300,
-            "provider_retry_cooldown_seconds": 30,
-            "single_cycle_timeout_seconds": 18000,
-            "idle_stop_seconds": 18000,
-            "max_run_seconds": 18000,
-            "provider_probe_timeout_seconds": 5,
-            "province_order": [
-                "Koshi Province",
-                "Madhesh Province",
-                "Bagmati Province",
-                "Gandaki Province",
-                "Lumbini Province",
-                "Karnali Province",
-                "Sudurpashchim Province",
-            ],
-            "brightdata_healthcheck_url": "https://api.brightdata.com/",
-        },
-    )
+    defaults = {
+        "provider_order": [
+            "agent-reach",
+            "autoglm-browser-agent",
+            "search",
+            "openclaw-core",
+            "apify",
+            "brightdata",
+        ],
+        "batch_size": 5,
+        "candidate_cooldown_seconds": 300,
+        "provider_retry_cooldown_seconds": 30,
+        "single_cycle_timeout_seconds": 10800,
+        "idle_stop_seconds": 10800,
+        "max_run_seconds": 10800,
+        "provider_probe_timeout_seconds": 5,
+        "province_order": [
+            "Koshi Province",
+            "Madhesh Province",
+            "Bagmati Province",
+            "Gandaki Province",
+            "Lumbini Province",
+            "Karnali Province",
+            "Sudurpashchim Province",
+        ],
+        "brightdata_healthcheck_url": "https://api.brightdata.com/",
+    }
+    return merge_defaults(defaults, read_json(CONFIG_PATH, {}))
 
 
 def read_json(path: Path, default: Any) -> Any:
@@ -92,6 +97,14 @@ def read_json(path: Path, default: Any) -> Any:
 def write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def merge_defaults(defaults: dict[str, Any], current: Any) -> dict[str, Any]:
+    if not isinstance(current, dict):
+        return dict(defaults)
+    merged = dict(defaults)
+    merged.update(current)
+    return merged
 
 
 def slugify(value: str) -> str:
@@ -153,35 +166,33 @@ def save_index(index: dict[str, Any]) -> None:
 
 def load_state() -> dict[str, Any]:
     config = load_config()
-    return read_json(
-        STATE_PATH,
-        {
-            "trigger_command": "/workking",
-            "status": "idle",
-            "provider_cursor": 0,
-            "provider_order": list(config.get("provider_order", [])),
-            "active_provider_order": list(config.get("provider_order", [])),
-            "batch_size": int(config.get("batch_size", 5)),
-            "candidate_cooldown_seconds": int(config.get("candidate_cooldown_seconds", 300)),
-            "provider_retry_cooldown_seconds": int(config.get("provider_retry_cooldown_seconds", 30)),
-            "single_cycle_timeout_seconds": int(config.get("single_cycle_timeout_seconds", 18000)),
-            "idle_stop_seconds": int(config.get("idle_stop_seconds", 18000)),
-            "max_run_seconds": int(config.get("max_run_seconds", 18000)),
-            "provider_probe_timeout_seconds": int(config.get("provider_probe_timeout_seconds", 5)),
-            "province_order": list(config.get("province_order", [])),
-            "province_cursor": 0,
-            "last_active_province": None,
-            "worker_pid": None,
-            "run_started_at": None,
-            "run_finished_at": None,
-            "last_unique_qualified_at": None,
-            "last_stop_reason": None,
-            "total_cycles": 0,
-            "total_new_unique": 0,
-            "last_provider_probe_results": [],
-            "updated_at": utc_now(),
-        },
-    )
+    defaults = {
+        "trigger_command": "/workking",
+        "status": "idle",
+        "provider_cursor": 0,
+        "provider_order": list(config.get("provider_order", [])),
+        "active_provider_order": list(config.get("provider_order", [])),
+        "batch_size": int(config.get("batch_size", 5)),
+        "candidate_cooldown_seconds": int(config.get("candidate_cooldown_seconds", 300)),
+        "provider_retry_cooldown_seconds": int(config.get("provider_retry_cooldown_seconds", 30)),
+        "single_cycle_timeout_seconds": int(config.get("single_cycle_timeout_seconds", 10800)),
+        "idle_stop_seconds": int(config.get("idle_stop_seconds", 10800)),
+        "max_run_seconds": int(config.get("max_run_seconds", 10800)),
+        "provider_probe_timeout_seconds": int(config.get("provider_probe_timeout_seconds", 5)),
+        "province_order": list(config.get("province_order", [])),
+        "province_cursor": 0,
+        "last_active_province": None,
+        "worker_pid": None,
+        "run_started_at": None,
+        "run_finished_at": None,
+        "last_unique_qualified_at": None,
+        "last_stop_reason": None,
+        "total_cycles": 0,
+        "total_new_unique": 0,
+        "last_provider_probe_results": [],
+        "updated_at": utc_now(),
+    }
+    return merge_defaults(defaults, read_json(STATE_PATH, {}))
 
 
 def save_state(state: dict[str, Any]) -> None:
@@ -402,7 +413,7 @@ def record_review(payload: ReviewPayload) -> dict[str, Any]:
     return {"ok": True, "result": payload.decision.lower(), "evidence_path": evidence_path}
 
 
-def start_run() -> dict[str, Any]:
+def start_run(province_override: str | None = None, trigger_command: str | None = None) -> dict[str, Any]:
     ensure_dirs()
     state = load_state()
     providers = list(state.get("provider_order", [])) or list(load_config().get("provider_order", []))
@@ -417,11 +428,19 @@ def start_run() -> dict[str, Any]:
     state["provider_cursor"] = (cursor + 1) % len(providers)
     state["active_provider_order"] = rotated
     state["status"] = "running"
+    if trigger_command:
+        state["trigger_command"] = trigger_command
     state["run_started_at"] = utc_now()
     state["run_finished_at"] = None
     state["last_unique_qualified_at"] = state["run_started_at"]
-    state["last_active_province"] = provinces[province_cursor]
-    state["province_cursor"] = (province_cursor + 1) % len(provinces)
+    if province_override:
+        province_name = province_override.strip()
+        if province_name not in provinces:
+            raise ValueError(f"unknown province override: {province_name}")
+        state["last_active_province"] = province_name
+    else:
+        state["last_active_province"] = provinces[province_cursor]
+        state["province_cursor"] = (province_cursor + 1) % len(provinces)
     state["worker_pid"] = None
     state["last_stop_reason"] = None
     state["total_cycles"] = 0
@@ -543,7 +562,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("start-run")
+    start_parser = sub.add_parser("start-run")
+    start_parser.add_argument("--province")
+    start_parser.add_argument("--trigger-command")
     finish = sub.add_parser("finish-run")
     finish.add_argument("--stop-reason", required=True)
     sub.add_parser("stop-run")
@@ -568,7 +589,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.command == "start-run":
-            result = start_run()
+            result = start_run(args.province, args.trigger_command)
         elif args.command == "finish-run":
             result = finish_run(args.stop_reason)
         elif args.command == "stop-run":
