@@ -16,6 +16,7 @@ from urllib import request as urlrequest
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 STORE_SCRIPT = SCRIPT_DIR / "workking_store.py"
+WORKKING_RUNTIME_AGENT = os.environ.get("WORKKING_RUNTIME_AGENT", "workking-runtime")
 
 
 def parse_utc(value: str | None) -> datetime | None:
@@ -201,22 +202,68 @@ def build_cycle_message(
 
 
 def run_cycle(message: str, timeout_seconds: int) -> dict[str, Any]:
-    cmd = [resolve_openclaw(), "agent", "--message", message, "--thinking", "medium", "--json"]
-    try:
-        completed = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_seconds, check=False)
-        return {
-            "returncode": completed.returncode,
-            "stdout": completed.stdout.strip(),
-            "stderr": completed.stderr.strip(),
-            "timed_out": False,
-        }
-    except subprocess.TimeoutExpired:
-        return {
-            "returncode": 124,
-            "stdout": "",
-            "stderr": f"cycle exceeded timeout of {timeout_seconds} seconds",
-            "timed_out": True,
-        }
+    def invoke(cmd: list[str], route: str) -> dict[str, Any]:
+        try:
+            completed = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_seconds, check=False)
+            return {
+                "returncode": completed.returncode,
+                "stdout": completed.stdout.strip(),
+                "stderr": completed.stderr.strip(),
+                "timed_out": False,
+                "route": route,
+            }
+        except subprocess.TimeoutExpired:
+            return {
+                "returncode": 124,
+                "stdout": "",
+                "stderr": f"{route} exceeded timeout of {timeout_seconds} seconds",
+                "timed_out": True,
+                "route": route,
+            }
+
+    base_cmd = [
+        resolve_openclaw(),
+        "agent",
+        "--agent",
+        WORKKING_RUNTIME_AGENT,
+        "--message",
+        message,
+        "--thinking",
+        "medium",
+        "--timeout",
+        str(max(timeout_seconds, 60)),
+        "--json",
+    ]
+    gateway_result = invoke(base_cmd, "gateway-agent")
+    if gateway_result["returncode"] == 0 and not gateway_result["timed_out"]:
+        return gateway_result
+
+    failure_text = f"{gateway_result.get('stdout', '')}\n{gateway_result.get('stderr', '')}".lower()
+    should_try_local = any(
+        token in failure_text
+        for token in (
+            "sessions_send",
+            "timed out",
+            "timeout",
+            "agent:main:main",
+            "gateway",
+            "session send",
+        )
+    ) or gateway_result["timed_out"]
+    if not should_try_local:
+        return gateway_result
+
+    local_result = invoke(base_cmd + ["--local"], "local-agent")
+    if local_result["returncode"] == 0 and not local_result["timed_out"]:
+        return local_result
+
+    local_stderr = local_result.get("stderr", "")
+    local_stdout = local_result.get("stdout", "")
+    gateway_result["stderr"] = (
+        f"{gateway_result.get('stderr', '')}\n"
+        f"local fallback failed: {local_stderr or local_stdout or 'unknown error'}"
+    ).strip()
+    return gateway_result
 
 
 def spawn_background_worker() -> int:

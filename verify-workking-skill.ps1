@@ -47,5 +47,16 @@ if (-not ($agent.tools.alsoAllow -contains "exec")) {
   throw "agent '$($agent.id)' is still missing exec in tools.alsoAllow"
 }
 
+$runtimeAgent = $null
+foreach ($item in $config.agents.list) {
+  if ($item.id -eq "workking-runtime" -or $item.name -eq "workking-runtime") {
+    $runtimeAgent = $item
+    break
+  }
+}
+if ($null -eq $runtimeAgent) {
+  throw "missing runtime agent 'workking-runtime' in $configPath"
+}
+
 $env:OPENCLAW_STATE_DIR = $TargetRoot
 python (Join-Path (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "workking") "scripts") "workking_store.py") status | Out-Host

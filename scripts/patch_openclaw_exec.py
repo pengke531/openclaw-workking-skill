@@ -11,6 +11,50 @@ def ensure_list(value):
     return []
 
 
+def ensure_runtime_agent(config, target_root, runtime_agent_id):
+    agents = config.get("agents")
+    if not isinstance(agents, dict):
+        agents = {}
+        config["agents"] = agents
+
+    agent_list = agents.get("list")
+    if not isinstance(agent_list, list):
+        agent_list = []
+        agents["list"] = agent_list
+
+    for agent in agent_list:
+        if isinstance(agent, dict) and (agent.get("id") == runtime_agent_id or agent.get("name") == runtime_agent_id):
+            tools = agent.get("tools")
+            if not isinstance(tools, dict):
+                tools = {}
+                agent["tools"] = tools
+            also_allow = ensure_list(tools.get("alsoAllow"))
+            if "exec" not in also_allow:
+                also_allow.append("exec")
+            tools["alsoAllow"] = also_allow
+            if "profile" not in tools:
+                tools["profile"] = "full"
+            return runtime_agent_id
+
+    workspace = Path(target_root).expanduser() / "workspace-workking-runtime"
+    agent_dir = Path(target_root).expanduser() / "agents" / runtime_agent_id / "agent"
+    workspace.mkdir(parents=True, exist_ok=True)
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    agent_list.append(
+        {
+            "id": runtime_agent_id,
+            "name": runtime_agent_id,
+            "workspace": str(workspace),
+            "agentDir": str(agent_dir),
+            "tools": {
+                "alsoAllow": ["exec"],
+                "profile": "full",
+            },
+        }
+    )
+    return runtime_agent_id
+
+
 def patch_agent_exec(config, agent_id):
     agents = config.get("agents")
     if not isinstance(agents, dict):
@@ -54,6 +98,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--target-root", required=True)
     parser.add_argument("--agent-id", default="main")
+    parser.add_argument("--runtime-agent-id", default="workking-runtime")
     args = parser.parse_args()
 
     config_path = Path(args.target_root).expanduser() / "openclaw.json"
@@ -76,12 +121,15 @@ def main():
         }))
         return 1
 
+    runtime_agent = ensure_runtime_agent(data, args.target_root, args.runtime_agent_id)
+
     updated = json.dumps(data, ensure_ascii=False, indent=2) + os.linesep
     config_path.write_text(updated, encoding="utf-8")
     print(json.dumps({
         "ok": True,
         "configPath": str(config_path),
         "patchedAgent": target_name,
+        "runtimeAgent": runtime_agent,
     }))
     return 0
 

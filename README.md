@@ -31,6 +31,7 @@ It is designed for:
 - up to 3 hour run window
 - 3 hour no-new-creator stop rule
 - fixed province start commands `/workking1` through `/workking7`
+- dedicated `workking-runtime` agent routing to avoid `main` session timeout issues
 
 ## Install
 
@@ -136,7 +137,7 @@ The fixed province command mapping is:
 Default pacing:
 
 - `batch_size`: `5`
-- `candidate_cooldown_seconds`: `300`
+- `candidate_cooldown_seconds`: `180`
 - `provider_retry_cooldown_seconds`: `30`
 - `max_run_seconds`: `10800`
 
