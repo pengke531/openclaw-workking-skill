@@ -525,7 +525,10 @@ def status() -> dict[str, Any]:
     remaining_run_seconds = None
     if state.get("run_started_at"):
         started = datetime.fromisoformat(str(state["run_started_at"]).replace("Z", "+00:00"))
-        remaining_run_seconds = max(int(state.get("max_run_seconds", 18000)) - int((datetime.now(timezone.utc) - started).total_seconds()), 0)
+        remaining_run_seconds = max(
+            int(state.get("max_run_seconds", 10800)) - int((datetime.now(timezone.utc) - started).total_seconds()),
+            0,
+        )
     return {
         "ok": True,
         "data_root": str(DATA_ROOT),

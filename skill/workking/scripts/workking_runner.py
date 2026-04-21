@@ -87,6 +87,37 @@ def terminate_pid(pid: int | None) -> None:
         return
 
 
+def process_exists(pid: int | None) -> bool:
+    if not pid:
+        return False
+    try:
+        if os.name == "nt":
+            result = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            output = f"{result.stdout}\n{result.stderr}".lower()
+            return str(pid) in output and "no tasks are running" not in output
+        os.kill(pid, 0)
+        return True
+    except Exception:
+        return False
+
+
+def wait_for_exit(pid: int | None, timeout_seconds: int = 15) -> bool:
+    if not pid:
+        return True
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if not process_exists(pid):
+            return True
+        time.sleep(0.5)
+    return not process_exists(pid)
+
+
 def browser_command(*args: str, timeout_seconds: int = 60) -> subprocess.CompletedProcess[str]:
     cmd = [resolve_openclaw(), "browser", "--browser-profile", "openclaw", *args]
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_seconds, check=False)
@@ -511,9 +542,20 @@ def run_loop() -> dict[str, Any]:
 
 def stop() -> dict[str, Any]:
     current = status_state()["state"]
-    terminate_pid(current.get("cycle_pid"))
-    terminate_pid(current.get("worker_pid"))
-    return store_command("stop-run")
+    cycle_pid = current.get("cycle_pid")
+    worker_pid = current.get("worker_pid")
+    terminate_pid(cycle_pid)
+    terminate_pid(worker_pid)
+    cycle_stopped = wait_for_exit(cycle_pid)
+    worker_stopped = wait_for_exit(worker_pid)
+    result = store_command("stop-run")
+    result["processes"] = {
+        "cycle_pid": cycle_pid,
+        "worker_pid": worker_pid,
+        "cycle_stopped": cycle_stopped,
+        "worker_stopped": worker_stopped,
+    }
+    return result
 
 
 def status() -> dict[str, Any]:
