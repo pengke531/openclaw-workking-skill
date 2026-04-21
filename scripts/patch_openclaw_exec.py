@@ -94,6 +94,33 @@ def patch_agent_exec(config, agent_id):
     return True, target.get("id") or target.get("name") or "unknown"
 
 
+def patch_all_agents_exec(config):
+    agents = config.get("agents")
+    if not isinstance(agents, dict):
+        return False, []
+
+    agent_list = agents.get("list")
+    if not isinstance(agent_list, list):
+        return False, []
+
+    patched = []
+    for agent in agent_list:
+        if not isinstance(agent, dict):
+            continue
+        tools = agent.get("tools")
+        if not isinstance(tools, dict):
+            tools = {}
+            agent["tools"] = tools
+        also_allow = ensure_list(tools.get("alsoAllow"))
+        if "exec" not in also_allow:
+            also_allow.append("exec")
+        tools["alsoAllow"] = also_allow
+        if "profile" not in tools:
+            tools["profile"] = "full"
+        patched.append(agent.get("id") or agent.get("name") or "unknown")
+    return True, patched
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--target-root", required=True)
@@ -121,6 +148,8 @@ def main():
         }))
         return 1
 
+    _, patched_agents = patch_all_agents_exec(data)
+
     runtime_agent = ensure_runtime_agent(data, args.target_root, args.runtime_agent_id)
 
     updated = json.dumps(data, ensure_ascii=False, indent=2) + os.linesep
@@ -129,6 +158,7 @@ def main():
         "ok": True,
         "configPath": str(config_path),
         "patchedAgent": target_name,
+        "patchedAgents": patched_agents,
         "runtimeAgent": runtime_agent,
     }))
     return 0

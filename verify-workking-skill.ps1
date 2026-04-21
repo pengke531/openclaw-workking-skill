@@ -30,21 +30,13 @@ if (-not (Test-Path $configPath)) {
 }
 
 $config = Get-Content -Raw $configPath | ConvertFrom-Json
-$agent = $null
+if (-not ($config.agents.list -is [System.Array]) -or $config.agents.list.Count -eq 0) {
+  throw "no patchable agents found in $configPath"
+}
 foreach ($item in $config.agents.list) {
-  if ($item.id -eq $AgentId -or $item.name -eq $AgentId) {
-    $agent = $item
-    break
+  if (-not ($item.tools.alsoAllow -contains "exec")) {
+    throw "agent '$($item.id)' is still missing exec in tools.alsoAllow"
   }
-}
-if ($null -eq $agent -and $config.agents.list.Count -gt 0) {
-  $agent = $config.agents.list[0]
-}
-if ($null -eq $agent) {
-  throw "no patchable agent found in $configPath"
-}
-if (-not ($agent.tools.alsoAllow -contains "exec")) {
-  throw "agent '$($agent.id)' is still missing exec in tools.alsoAllow"
 }
 
 $runtimeAgent = $null
