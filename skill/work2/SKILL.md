@@ -59,6 +59,9 @@ Direct workflow steps:
 
 1. Read `registry/index.json` first and ignore every stored Instagram handle and stored profile URL.
 2. Search Instagram only within `Madhesh Province`. Do not search Nepal broadly and filter later.
+   The search page is only for surfacing a candidate. Before any verification, open the candidate's Instagram personal profile page using this sequence: canonical profile URL first if already surfaced, then `https://www.instagram.com/<handle>/`, then `https://instagram.com/<handle>/`.
+   If one profile URL variant fails, try the next variant immediately. Do not use search pages, posts, reels, or location pages as follower evidence.
+   If all profile-page variants fail, or the page is blocked by login, checkpoint, suspension, challenge, timeout, or blank browser load, treat that attempt as page-open failure, do not guess follower evidence, and move on.
 3. Process exactly one candidate in this invocation when operating without the runner.
 4. Verify geography, persona, and follower evidence.
 5. If qualified and non-duplicate, immediately update:
@@ -71,7 +74,7 @@ Direct workflow steps:
 8. Keep the run state under `runtime/state.json` consistent with:
    - `trigger_command = "/work2"`
    - `last_active_province = "Madhesh Province"`
-   - `candidate_cooldown_seconds = 180`
+   - `candidate_cooldown_seconds = 300`
    - `max_candidate_searches = 50`
 
 Required creator fields:

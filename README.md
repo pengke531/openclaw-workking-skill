@@ -25,7 +25,7 @@ It is designed for:
 - automatic provider skip when unhealthy
 - `openclaw-core` builtin fallback for plain OpenClaw installs
 - one candidate search per cycle
-- 3 minute cooldown between candidate searches
+- 5 minute cooldown between candidate searches
 - 50 candidate searches per run
 - immediate save on every new qualified creator
 - automatic fresh-cycle restart after each new qualified creator
@@ -102,7 +102,11 @@ Each run now:
 
 - stays locked to the chosen province for the whole run
 - searches one candidate at a time
-- waits 180 seconds between candidate searches
+- must open the creator's Instagram personal profile page before verification
+- tries the canonical profile URL first, then `https://www.instagram.com/<handle>/`, then `https://instagram.com/<handle>/`
+- treats login walls, blank loads, checkpoints, suspensions, and page-open failures as provider failures and quickly falls through to the next provider
+- does not accept search pages, post pages, reels pages, or location pages as follower evidence
+- waits 300 seconds between candidate searches
 - stops automatically after 50 candidate searches
 
 ## Installed path
@@ -162,7 +166,7 @@ The fixed province command mapping is:
 Default pacing:
 
 - `batch_size`: `1`
-- `candidate_cooldown_seconds`: `180`
+- `candidate_cooldown_seconds`: `300`
 - `provider_retry_cooldown_seconds`: `30`
 - `single_cycle_timeout_seconds`: `900`
 - `max_candidate_searches`: `50`

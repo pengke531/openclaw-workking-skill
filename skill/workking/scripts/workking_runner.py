@@ -211,6 +211,13 @@ def build_cycle_message(
         f"After finishing this one candidate, stop and return control to the runner. The runner itself will wait {candidate_cooldown_seconds} seconds before the next search. "
         "Keep Instagram only, Nepal only, personal creator only, followers >= 100000, and strict evidence gates. "
         "If provider is openclaw-core, use only the built-in OpenClaw browsing, fetch, and search capabilities available in this environment. "
+        "Candidate discovery pages are only for surfacing a handle or possible profile URL. "
+        "Before any verification, you must open the candidate's Instagram personal profile page where the follower count is visible on the profile header. "
+        "Use this exact open sequence: first the canonical profile URL if already surfaced, then https://www.instagram.com/<handle>/, then https://instagram.com/<handle>/. "
+        "If one variant fails to open, try the next variant immediately in the same cycle. "
+        "Do not use keyword search pages, location pages, hashtag pages, reels pages, post pages, or media pages as follower evidence. "
+        "If all profile-page variants fail, or the page is blocked by login, checkpoint, suspension, challenge, timeout, or blank browser load, classify the attempt as a page-open failure, do not guess, and return control so the runner can switch provider if needed. "
+        "If you cannot reach a personal profile page with visible follower count after those attempts, classify the candidate as EVIDENCE_GAP instead of guessing. "
         "Verify geography, persona, and follower evidence for the single candidate. "
         "As soon as one qualified and non-duplicate creator is found, write the payload through workking_store.py upsert-qualified. "
         "For duplicates, only update followers and updated_at through record-review. "
@@ -219,6 +226,40 @@ def build_cycle_message(
         "Do not stop the whole task for that reason. Return control so the runner can switch to the next provider automatically. "
         "Do not produce a chat report; update only the local files."
     )
+
+
+def classify_cycle_issue(result: dict[str, Any]) -> str | None:
+    text = "\n".join(
+        [
+            str(result.get("stdout") or ""),
+            str(result.get("stderr") or ""),
+        ]
+    ).lower()
+    provider_failure_markers = [
+        "session suspended",
+        "account suspended",
+        "account disabled",
+        "checkpoint",
+        "challenge required",
+        "challenge_required",
+        "login required",
+        "not logged in",
+        "cookie expired",
+        "timed out",
+        "timeout",
+        "sessions_send",
+        "unable to open page",
+        "cannot open page",
+        "failed to open page",
+        "page-open failure",
+        "blank browser",
+        "browser load failed",
+    ]
+    if any(marker in text for marker in provider_failure_markers):
+        return "provider_failure"
+    if result.get("timed_out"):
+        return "provider_failure"
+    return None
 
 
 def run_cycle(message: str, timeout_seconds: int) -> dict[str, Any]:
@@ -294,7 +335,7 @@ def run_loop() -> dict[str, Any]:
     index_path = Path(run_info["index_path"])
     provider_order = list(run_info["state"].get("active_provider_order") or run_info["state"]["provider_order"])
     active_province = str(run_info["state"].get("last_active_province") or "Nepal")
-    candidate_cooldown_seconds = int(run_info["state"].get("candidate_cooldown_seconds", 180))
+    candidate_cooldown_seconds = int(run_info["state"].get("candidate_cooldown_seconds", 300))
     provider_retry_cooldown_seconds = int(run_info["state"].get("provider_retry_cooldown_seconds", 30))
     single_cycle_timeout_seconds = int(run_info["state"].get("single_cycle_timeout_seconds", 900))
     provider_probe_timeout_seconds = int(run_info["state"].get("provider_probe_timeout_seconds", 5))
@@ -356,6 +397,8 @@ def run_loop() -> dict[str, Any]:
         after_count = count_registered_handles(index_path)
         new_unique = max(after_count - before_count, 0)
 
+        cycle_issue = classify_cycle_issue(result)
+
         store_command("complete-cycle", "--new-unique", str(new_unique))
 
         cycle_summary = {
@@ -368,6 +411,7 @@ def run_loop() -> dict[str, Any]:
             "returncode": result.get("returncode"),
             "stderr": result.get("stderr", ""),
             "probe_results": probe_results,
+            "issue": cycle_issue,
         }
         cycles.append(cycle_summary)
 
@@ -381,7 +425,8 @@ def run_loop() -> dict[str, Any]:
             return {"ok": True, "state": finished["state"], "cycles": cycles}
 
         provider_order = provider_order[1:] + provider_order[:1]
-        time.sleep(candidate_cooldown_seconds)
+        sleep_seconds = provider_retry_cooldown_seconds if cycle_issue == "provider_failure" else candidate_cooldown_seconds
+        time.sleep(sleep_seconds)
 
 
 def stop() -> dict[str, Any]:

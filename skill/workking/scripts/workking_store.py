@@ -68,7 +68,7 @@ def load_config() -> dict[str, Any]:
             "brightdata",
         ],
         "batch_size": 1,
-        "candidate_cooldown_seconds": 180,
+        "candidate_cooldown_seconds": 300,
         "provider_retry_cooldown_seconds": 30,
         "single_cycle_timeout_seconds": 900,
         "idle_stop_seconds": 10800,
@@ -174,7 +174,7 @@ def load_state() -> dict[str, Any]:
         "provider_order": list(config.get("provider_order", [])),
         "active_provider_order": list(config.get("provider_order", [])),
         "batch_size": int(config.get("batch_size", 1)),
-        "candidate_cooldown_seconds": int(config.get("candidate_cooldown_seconds", 180)),
+        "candidate_cooldown_seconds": int(config.get("candidate_cooldown_seconds", 300)),
         "provider_retry_cooldown_seconds": int(config.get("provider_retry_cooldown_seconds", 30)),
         "single_cycle_timeout_seconds": int(config.get("single_cycle_timeout_seconds", 900)),
         "idle_stop_seconds": int(config.get("idle_stop_seconds", 10800)),
@@ -197,8 +197,8 @@ def load_state() -> dict[str, Any]:
         "updated_at": utc_now(),
     }
     state = merge_defaults(defaults, read_json(STATE_PATH, {}))
-    if not CONFIG_PATH.exists() and int(state.get("candidate_cooldown_seconds", 0) or 0) == 300:
-        state["candidate_cooldown_seconds"] = int(config.get("candidate_cooldown_seconds", 180))
+    if not CONFIG_PATH.exists() and int(state.get("candidate_cooldown_seconds", 0) or 0) == 180:
+        state["candidate_cooldown_seconds"] = int(config.get("candidate_cooldown_seconds", 300))
     return state
 
 

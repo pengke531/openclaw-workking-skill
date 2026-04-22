@@ -8,7 +8,7 @@
     "brightdata"
   ],
   "batch_size": 1,
-  "candidate_cooldown_seconds": 180,
+  "candidate_cooldown_seconds": 300,
   "provider_retry_cooldown_seconds": 30,
   "single_cycle_timeout_seconds": 900,
   "idle_stop_seconds": 10800,
