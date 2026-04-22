@@ -24,15 +24,13 @@ It is designed for:
 - fast provider health probes before each cycle
 - automatic provider skip when unhealthy
 - `openclaw-core` builtin fallback for plain OpenClaw installs
-- each cycle actively opens the current province search surface in the managed OpenClaw browser
-- bounded candidate cap per province window
-- per-candidate cooldown to reduce creator lookup frequency
+- one candidate search per cycle
+- 3 minute cooldown between candidate searches
+- 50 candidate searches per run
 - immediate save on every new qualified creator
 - automatic fresh-cycle restart after each new qualified creator
-- up to 3 hour run window
-- 3 hour no-new-creator stop rule
 - fixed province start commands `/workking1` through `/workking7`
-- dedicated `workking-runtime` agent routing to avoid `main` session timeout issues
+- short alias commands `/work1` through `/work7`
 
 ## Install
 
@@ -88,10 +86,24 @@ Fixed province commands:
 /workking7  # Sudurpashchim Province
 ```
 
-Each run now does two visible things:
+Alias commands:
 
-- starts the managed OpenClaw browser profile if needed
-- opens the current province Instagram search surface before the verification cycle
+```text
+/work1  # Koshi Province
+/work2  # Madhesh Province
+/work3  # Bagmati Province
+/work4  # Gandaki Province
+/work5  # Lumbini Province
+/work6  # Karnali Province
+/work7  # Sudurpashchim Province
+```
+
+Each run now:
+
+- stays locked to the chosen province for the whole run
+- searches one candidate at a time
+- waits 180 seconds between candidate searches
+- stops automatically after 50 candidate searches
 
 ## Installed path
 
@@ -103,6 +115,13 @@ Each run now does two visible things:
 - `~/.openclaw/skills/workking5/SKILL.md`
 - `~/.openclaw/skills/workking6/SKILL.md`
 - `~/.openclaw/skills/workking7/SKILL.md`
+- `~/.openclaw/skills/work1/SKILL.md`
+- `~/.openclaw/skills/work2/SKILL.md`
+- `~/.openclaw/skills/work3/SKILL.md`
+- `~/.openclaw/skills/work4/SKILL.md`
+- `~/.openclaw/skills/work5/SKILL.md`
+- `~/.openclaw/skills/work6/SKILL.md`
+- `~/.openclaw/skills/work7/SKILL.md`
 - `~/.openclaw/skills/workking/scripts/workking_runner.py`
 - `~/.openclaw/skills/workking/scripts/workking_store.py`
 
@@ -142,10 +161,11 @@ The fixed province command mapping is:
 
 Default pacing:
 
-- `batch_size`: `5`
+- `batch_size`: `1`
 - `candidate_cooldown_seconds`: `180`
 - `provider_retry_cooldown_seconds`: `30`
-- `max_run_seconds`: `10800`
+- `single_cycle_timeout_seconds`: `900`
+- `max_candidate_searches`: `50`
 
 ## Current command path
 
@@ -159,4 +179,16 @@ The primary start commands after this fix are:
 /workking5
 /workking6
 /workking7
+```
+
+Short aliases:
+
+```text
+/work1
+/work2
+/work3
+/work4
+/work5
+/work6
+/work7
 ```

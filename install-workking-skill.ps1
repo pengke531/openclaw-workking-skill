@@ -8,7 +8,9 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $skillsSourceRoot = Join-Path $repoRoot "skill"
-$skillDirs = Get-ChildItem -Directory $skillsSourceRoot | Where-Object { $_.Name -like "workking*" }
+$skillDirs = Get-ChildItem -Directory $skillsSourceRoot | Where-Object {
+  $_.Name -like "workking*" -or $_.Name -match "^work[1-7]$"
+}
 $patchScript = Join-Path $repoRoot "scripts\\patch_openclaw_exec.py"
 $configSource = Join-Path $skillsSourceRoot "workking\\references\\workking.config.example.json"
 $configRoot = Join-Path (Join-Path $TargetRoot "data") "workking"

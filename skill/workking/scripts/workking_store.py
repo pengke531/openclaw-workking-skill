@@ -67,12 +67,13 @@ def load_config() -> dict[str, Any]:
             "apify",
             "brightdata",
         ],
-        "batch_size": 5,
+        "batch_size": 1,
         "candidate_cooldown_seconds": 180,
         "provider_retry_cooldown_seconds": 30,
-        "single_cycle_timeout_seconds": 10800,
+        "single_cycle_timeout_seconds": 900,
         "idle_stop_seconds": 10800,
         "max_run_seconds": 10800,
+        "max_candidate_searches": 50,
         "provider_probe_timeout_seconds": 5,
         "province_order": [
             "Koshi Province",
@@ -172,12 +173,13 @@ def load_state() -> dict[str, Any]:
         "provider_cursor": 0,
         "provider_order": list(config.get("provider_order", [])),
         "active_provider_order": list(config.get("provider_order", [])),
-        "batch_size": int(config.get("batch_size", 5)),
+        "batch_size": int(config.get("batch_size", 1)),
         "candidate_cooldown_seconds": int(config.get("candidate_cooldown_seconds", 180)),
         "provider_retry_cooldown_seconds": int(config.get("provider_retry_cooldown_seconds", 30)),
-        "single_cycle_timeout_seconds": int(config.get("single_cycle_timeout_seconds", 10800)),
+        "single_cycle_timeout_seconds": int(config.get("single_cycle_timeout_seconds", 900)),
         "idle_stop_seconds": int(config.get("idle_stop_seconds", 10800)),
         "max_run_seconds": int(config.get("max_run_seconds", 10800)),
+        "max_candidate_searches": int(config.get("max_candidate_searches", 50)),
         "provider_probe_timeout_seconds": int(config.get("provider_probe_timeout_seconds", 5)),
         "province_order": list(config.get("province_order", [])),
         "province_cursor": 0,
@@ -190,6 +192,7 @@ def load_state() -> dict[str, Any]:
         "last_stop_reason": None,
         "total_cycles": 0,
         "total_new_unique": 0,
+        "searches_completed": 0,
         "last_provider_probe_results": [],
         "updated_at": utc_now(),
     }
@@ -449,6 +452,7 @@ def start_run(province_override: str | None = None, trigger_command: str | None 
     state["last_stop_reason"] = None
     state["total_cycles"] = 0
     state["total_new_unique"] = 0
+    state["searches_completed"] = 0
     save_state(state)
     return {
         "ok": True,
@@ -465,6 +469,7 @@ def start_run(province_override: str | None = None, trigger_command: str | None 
         "single_cycle_timeout_seconds": state["single_cycle_timeout_seconds"],
         "idle_stop_seconds": state["idle_stop_seconds"],
         "max_run_seconds": state["max_run_seconds"],
+        "max_candidate_searches": state["max_candidate_searches"],
         "provider_probe_timeout_seconds": state["provider_probe_timeout_seconds"],
         "run_started_at": state["run_started_at"],
         "last_unique_qualified_at": state["last_unique_qualified_at"],
@@ -490,6 +495,7 @@ def stop_run() -> dict[str, Any]:
 def complete_cycle(new_unique: int) -> dict[str, Any]:
     state = load_state()
     state["total_cycles"] = int(state.get("total_cycles", 0)) + 1
+    state["searches_completed"] = int(state.get("searches_completed", 0)) + 1
     if new_unique > 0:
         state["total_new_unique"] = int(state.get("total_new_unique", 0)) + new_unique
         state["last_unique_qualified_at"] = utc_now()
@@ -538,6 +544,7 @@ def status() -> dict[str, Any]:
         "state": state,
         "active_province": active_province,
         "remaining_run_seconds": remaining_run_seconds,
+        "remaining_searches": max(int(state.get("max_candidate_searches", 50)) - int(state.get("searches_completed", 0)), 0),
         "registered_count": len({k for k in load_index().get("records", {}).keys() if "instagram.com/" not in k}),
     }
 

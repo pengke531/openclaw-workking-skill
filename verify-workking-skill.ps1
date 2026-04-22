@@ -14,6 +14,13 @@ $required = @(
   (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "workking5") "SKILL.md"),
   (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "workking6") "SKILL.md"),
   (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "workking7") "SKILL.md"),
+  (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "work1") "SKILL.md"),
+  (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "work2") "SKILL.md"),
+  (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "work3") "SKILL.md"),
+  (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "work4") "SKILL.md"),
+  (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "work5") "SKILL.md"),
+  (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "work6") "SKILL.md"),
+  (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "work7") "SKILL.md"),
   (Join-Path (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "workking") "scripts") "workking_runner.py"),
   (Join-Path (Join-Path (Join-Path (Join-Path $TargetRoot "skills") "workking") "scripts") "workking_store.py")
 )

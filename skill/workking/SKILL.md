@@ -63,6 +63,13 @@ For bare `/workking`, do not start a search run automatically. Return the fixed 
 - `/workking5` = `Lumbini Province`
 - `/workking6` = `Karnali Province`
 - `/workking7` = `Sudurpashchim Province`
+- `/work1` = `Koshi Province`
+- `/work2` = `Madhesh Province`
+- `/work3` = `Bagmati Province`
+- `/work4` = `Gandaki Province`
+- `/work5` = `Lumbini Province`
+- `/work6` = `Karnali Province`
+- `/work7` = `Sudurpashchim Province`
 
 Only mention `/workking status`, `/workking stop`, and `/workking export` as the control commands.
 
@@ -108,8 +115,10 @@ Current workflow requirements:
 - store every newly qualified non-duplicate creator immediately
 - always read the local registry first and ignore existing creators
 - rotate providers on each new run and skip unhealthy providers automatically
-- run for up to 3 hours total
-- start runs only through `/workking1` to `/workking7`
+- search exactly one candidate per cycle
+- wait 3 minutes between candidate searches
+- stop after 50 candidate searches in one run
+- start runs only through `/workking1` to `/workking7` or `/work1` to `/work7`
 - each of those commands is locked to one fixed Nepal province
 - treat one suspended Instagram session as one provider failure, not as a global blocker
 - keep Instagram-only, Nepal-only, personal-creator-only, `followers >= 100000`

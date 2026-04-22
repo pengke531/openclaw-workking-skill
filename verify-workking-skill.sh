@@ -21,6 +21,13 @@ for path in \
   "$TARGET_ROOT/skills/workking5/SKILL.md" \
   "$TARGET_ROOT/skills/workking6/SKILL.md" \
   "$TARGET_ROOT/skills/workking7/SKILL.md" \
+  "$TARGET_ROOT/skills/work1/SKILL.md" \
+  "$TARGET_ROOT/skills/work2/SKILL.md" \
+  "$TARGET_ROOT/skills/work3/SKILL.md" \
+  "$TARGET_ROOT/skills/work4/SKILL.md" \
+  "$TARGET_ROOT/skills/work5/SKILL.md" \
+  "$TARGET_ROOT/skills/work6/SKILL.md" \
+  "$TARGET_ROOT/skills/work7/SKILL.md" \
   "$TARGET_ROOT/skills/workking/scripts/workking_runner.py" \
   "$TARGET_ROOT/skills/workking/scripts/workking_store.py"
 do

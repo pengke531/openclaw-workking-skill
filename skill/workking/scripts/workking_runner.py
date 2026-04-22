@@ -7,7 +7,6 @@ import shutil
 import subprocess
 import sys
 import time
-from urllib import parse as urlparse
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -17,7 +16,6 @@ from urllib import request as urlrequest
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 STORE_SCRIPT = SCRIPT_DIR / "workking_store.py"
-WORKKING_RUNTIME_AGENT = os.environ.get("WORKKING_RUNTIME_AGENT", "workking-runtime")
 
 
 def parse_utc(value: str | None) -> datetime | None:
@@ -28,13 +26,6 @@ def parse_utc(value: str | None) -> datetime | None:
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc).replace(microsecond=0)
-
-
-def seconds_since(started_at: str | None) -> int:
-    started = parse_utc(started_at)
-    if started is None:
-        return 0
-    return int((utc_now() - started).total_seconds())
 
 
 def resolve_openclaw() -> str:
@@ -118,29 +109,6 @@ def wait_for_exit(pid: int | None, timeout_seconds: int = 15) -> bool:
     return not process_exists(pid)
 
 
-def browser_command(*args: str, timeout_seconds: int = 60) -> subprocess.CompletedProcess[str]:
-    cmd = [resolve_openclaw(), "browser", "--browser-profile", "openclaw", *args]
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_seconds, check=False)
-
-
-def province_browser_url(active_province: str) -> str:
-    query = urlparse.quote_plus(f"Instagram creators in {active_province} Nepal")
-    return f"https://www.instagram.com/explore/search/keyword/?q={query}"
-
-
-def ensure_browser_search_surface(active_province: str) -> dict[str, Any]:
-    start_result = browser_command("start", timeout_seconds=90)
-    open_url = province_browser_url(active_province)
-    open_result = browser_command("open", open_url, timeout_seconds=90)
-    return {
-        "start_returncode": start_result.returncode,
-        "open_returncode": open_result.returncode,
-        "open_url": open_url,
-        "start_stderr": (start_result.stderr or start_result.stdout).strip(),
-        "open_stderr": (open_result.stderr or open_result.stdout).strip(),
-    }
-
-
 def list_available_skills(timeout_seconds: int) -> set[str]:
     cmd = [resolve_openclaw(), "skills", "list"]
     completed = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_seconds, check=False)
@@ -175,28 +143,13 @@ def probe_provider(provider: str, available_skills: set[str], timeout_seconds: i
     if provider_lower == "openclaw-core":
         try:
             resolve_openclaw()
-            return {
-                "provider": provider,
-                "ready": True,
-                "reason": "openclaw_core_ready",
-                "kind": "builtin",
-            }
+            return {"provider": provider, "ready": True, "reason": "openclaw_core_ready", "kind": "builtin"}
         except Exception as exc:
-            return {
-                "provider": provider,
-                "ready": False,
-                "reason": exc.__class__.__name__,
-                "kind": "builtin",
-            }
+            return {"provider": provider, "ready": False, "reason": exc.__class__.__name__, "kind": "builtin"}
 
     if provider_lower in {"agent-reach", "autoglm-browser-agent", "search", "tavily"}:
         ready = provider_lower in available_skills
-        return {
-            "provider": provider,
-            "ready": ready,
-            "reason": "skill_ready" if ready else "skill_missing",
-            "kind": "skill",
-        }
+        return {"provider": provider, "ready": ready, "reason": "skill_ready" if ready else "skill_missing", "kind": "skill"}
 
     if provider_lower == "apify":
         token = os.environ.get("APIFY_TOKEN", "").strip()
@@ -238,34 +191,28 @@ def select_provider_chain(provider_order: list[str], probe_timeout_seconds: int)
 
 def build_cycle_message(
     provider_order: list[str],
-    batch_size: int,
     active_province: str,
-    province_order: list[str],
     candidate_cooldown_seconds: int,
     index_path: str,
+    search_number: int,
+    max_candidate_searches: int,
 ) -> str:
     preferred = provider_order[0]
     fallbacks = ", ".join(provider_order[1:]) if len(provider_order) > 1 else "none"
-    province_scope = ", ".join(province_order) if province_order else "Nepal"
     return (
         "Use the workking skill rules for Nepal Instagram creator discovery. "
-        f"Before searching, read the local registry index from {index_path} "
-        "and ignore every stored handle and profile URL. "
-        f"Use a single search cycle of exactly {batch_size} candidates before verification. "
-        f"Current province focus: {active_province}. "
-        f"Province rotation set: {province_scope}. "
-        "Search only inside the current province focus for this entire run. "
-        "Do not do Nepal-wide discovery and then discard out-of-region accounts. "
-        "All search queries, location pages, keyword combinations, and candidate discovery steps must be scoped to the current province first. "
-        f"Throttle the workflow so there is at least {candidate_cooldown_seconds} seconds between each individual candidate search or profile verification action. "
-        "This cooldown applies between one creator lookup and the next creator lookup. "
+        f"Before searching, read the local registry index from {index_path} and ignore every stored handle and profile URL. "
+        f"This run is locked to {active_province}. "
+        "Search Instagram only inside that province scope. "
+        "Do not do Nepal-wide search and then filter after the fact. "
+        f"This cycle must search exactly one candidate only. This is search {search_number} of {max_candidate_searches} for the current run. "
         f"Preferred crawler/provider this cycle: {preferred}. "
         f"Fallback order if it fails or becomes noisy: {fallbacks}. "
-        "Search only Instagram. Keep Nepal only, personal creator only, followers >= 100000, and strict evidence gates. "
+        f"After finishing this one candidate, stop and return control to the runner. The runner itself will wait {candidate_cooldown_seconds} seconds before the next search. "
+        "Keep Instagram only, Nepal only, personal creator only, followers >= 100000, and strict evidence gates. "
         "If provider is openclaw-core, use only the built-in OpenClaw browsing, fetch, and search capabilities available in this environment. "
-        "Verify geography, persona, and follower evidence one profile at a time. "
-        "As soon as one qualified and non-duplicate creator is found, write the payload through workking_store.py upsert-qualified, "
-        "then stop the current cycle immediately so the runner can launch the next cycle. "
+        "Verify geography, persona, and follower evidence for the single candidate. "
+        "As soon as one qualified and non-duplicate creator is found, write the payload through workking_store.py upsert-qualified. "
         "For duplicates, only update followers and updated_at through record-review. "
         "For unclear evidence, use EVIDENCE_GAP and do not register. "
         "If a provider reports an Instagram session suspension, login failure, checkpoint, or account disablement, treat that as a provider failure only. "
@@ -275,106 +222,22 @@ def build_cycle_message(
 
 
 def run_cycle(message: str, timeout_seconds: int) -> dict[str, Any]:
-    def invoke(cmd: list[str], route: str) -> dict[str, Any]:
-        try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            store_command("attach-cycle", "--pid", str(proc.pid))
-            start_time = time.time()
-            while True:
-                if proc.poll() is not None:
-                    stdout, stderr = proc.communicate()
-                    store_command("attach-cycle")
-                    return {
-                        "returncode": proc.returncode,
-                        "stdout": (stdout or "").strip(),
-                        "stderr": (stderr or "").strip(),
-                        "timed_out": False,
-                        "route": route,
-                    }
-                if time.time() - start_time >= timeout_seconds:
-                    terminate_pid(proc.pid)
-                    store_command("attach-cycle")
-                    return {
-                        "returncode": 124,
-                        "stdout": "",
-                        "stderr": f"{route} exceeded timeout of {timeout_seconds} seconds",
-                        "timed_out": True,
-                        "route": route,
-                    }
-                current_state = status_state()["state"]
-                if current_state.get("status") != "running":
-                    terminate_pid(proc.pid)
-                    store_command("attach-cycle")
-                    return {
-                        "returncode": 143,
-                        "stdout": "",
-                        "stderr": f"{route} interrupted by stop request",
-                        "timed_out": False,
-                        "route": route,
-                    }
-                time.sleep(1)
-        except subprocess.TimeoutExpired:
-            store_command("attach-cycle")
-            return {
-                "returncode": 124,
-                "stdout": "",
-                "stderr": f"{route} exceeded timeout of {timeout_seconds} seconds",
-                "timed_out": True,
-                "route": route,
-            }
-        except Exception as exc:
-            store_command("attach-cycle")
-            return {
-                "returncode": 1,
-                "stdout": "",
-                "stderr": f"{route} failed before completion: {exc}",
-                "timed_out": False,
-                "route": route,
-            }
-
-    base_cmd = [
-        resolve_openclaw(),
-        "agent",
-        "--agent",
-        WORKKING_RUNTIME_AGENT,
-        "--message",
-        message,
-        "--thinking",
-        "medium",
-        "--timeout",
-        str(max(timeout_seconds, 60)),
-        "--json",
-    ]
-    gateway_result = invoke(base_cmd, "gateway-agent")
-    if gateway_result["returncode"] == 0 and not gateway_result["timed_out"]:
-        return gateway_result
-
-    failure_text = f"{gateway_result.get('stdout', '')}\n{gateway_result.get('stderr', '')}".lower()
-    should_try_local = any(
-        token in failure_text
-        for token in (
-            "sessions_send",
-            "timed out",
-            "timeout",
-            "agent:main:main",
-            "gateway",
-            "session send",
-        )
-    ) or gateway_result["timed_out"]
-    if not should_try_local:
-        return gateway_result
-
-    local_result = invoke(base_cmd + ["--local"], "local-agent")
-    if local_result["returncode"] == 0 and not local_result["timed_out"]:
-        return local_result
-
-    local_stderr = local_result.get("stderr", "")
-    local_stdout = local_result.get("stdout", "")
-    gateway_result["stderr"] = (
-        f"{gateway_result.get('stderr', '')}\n"
-        f"local fallback failed: {local_stderr or local_stdout or 'unknown error'}"
-    ).strip()
-    return gateway_result
+    cmd = [resolve_openclaw(), "agent", "--message", message, "--thinking", "medium", "--json"]
+    try:
+        completed = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_seconds, check=False)
+        return {
+            "returncode": completed.returncode,
+            "stdout": completed.stdout.strip(),
+            "stderr": completed.stderr.strip(),
+            "timed_out": False,
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            "returncode": 124,
+            "stdout": "",
+            "stderr": f"cycle exceeded timeout of {timeout_seconds} seconds",
+            "timed_out": True,
+        }
 
 
 def spawn_background_worker() -> int:
@@ -424,23 +287,18 @@ def start(province: str | None = None, trigger_command: str | None = None) -> di
 
 
 def run_loop() -> dict[str, Any]:
-    current_info = status_state()
-    if current_info["state"].get("status") != "running":
+    run_info = status_state()
+    if run_info["state"].get("status") != "running":
         return {"ok": True, "result": "not_running"}
 
-    index_path = Path(current_info["index_path"])
-    run_info = current_info
     index_path = Path(run_info["index_path"])
     provider_order = list(run_info["state"].get("active_provider_order") or run_info["state"]["provider_order"])
-    province_order = list(run_info["state"].get("province_order", []))
-    batch_size = int(run_info["state"].get("batch_size", 5))
-    candidate_cooldown_seconds = int(run_info["state"].get("candidate_cooldown_seconds", 300))
-    provider_retry_cooldown_seconds = int(run_info["state"].get("provider_retry_cooldown_seconds", 30))
-    single_cycle_timeout_seconds = int(run_info["state"].get("single_cycle_timeout_seconds", 10800))
-    idle_stop_seconds = int(run_info["state"].get("idle_stop_seconds", 10800))
-    max_run_seconds = int(run_info["state"].get("max_run_seconds", 10800))
-    provider_probe_timeout_seconds = int(run_info["state"].get("provider_probe_timeout_seconds", 5))
     active_province = str(run_info["state"].get("last_active_province") or "Nepal")
+    candidate_cooldown_seconds = int(run_info["state"].get("candidate_cooldown_seconds", 180))
+    provider_retry_cooldown_seconds = int(run_info["state"].get("provider_retry_cooldown_seconds", 30))
+    single_cycle_timeout_seconds = int(run_info["state"].get("single_cycle_timeout_seconds", 900))
+    provider_probe_timeout_seconds = int(run_info["state"].get("provider_probe_timeout_seconds", 5))
+    max_candidate_searches = int(run_info["state"].get("max_candidate_searches", 50))
 
     cycles: list[dict[str, Any]] = []
 
@@ -449,59 +307,51 @@ def run_loop() -> dict[str, Any]:
         current = current_info["state"]
         if current.get("status") != "running":
             return {"ok": True, "state": current, "cycles": cycles}
-        if seconds_since(current.get("run_started_at")) >= max_run_seconds:
-            finished = store_command("finish-run", "--stop-reason", f"max run window reached ({max_run_seconds} seconds)")
+
+        searches_completed = int(current.get("searches_completed", 0))
+        if searches_completed >= max_candidate_searches:
+            finished = store_command(
+                "finish-run",
+                "--stop-reason",
+                f"reached max candidate searches ({max_candidate_searches})",
+            )
             return {"ok": True, "state": finished["state"], "cycles": cycles}
 
         ready_chain, probe_results = select_provider_chain(provider_order, provider_probe_timeout_seconds)
-        probe_payload_path = Path(run_info["tmp_dir"]) / "provider_probes.json"
+        probe_payload_path = Path(current_info["tmp_dir"]) / "provider_probes.json"
         probe_payload_path.write_text(json.dumps(probe_results, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         store_command("update-provider-probes", "--payload", str(probe_payload_path))
 
         if not ready_chain:
-            refreshed = status_state()["state"]
-            last_unique = parse_utc(refreshed.get("last_unique_qualified_at")) or utc_now()
-            idle_seconds = int((utc_now() - last_unique).total_seconds())
             cycles.append(
                 {
                     "finished_at": utc_now().isoformat().replace("+00:00", "Z"),
                     "provider": None,
+                    "province": active_province,
                     "new_unique": 0,
                     "timed_out": False,
                     "returncode": None,
                     "stderr": "no ready providers after probing",
-                    "province": active_province,
                     "probe_results": probe_results,
                 }
             )
-            if idle_seconds >= idle_stop_seconds:
-                finished = store_command("finish-run", "--stop-reason", "no healthy providers and idle window exceeded")
-                return {"ok": True, "state": finished["state"], "cycles": cycles}
             provider_order = provider_order[1:] + provider_order[:1]
             time.sleep(provider_retry_cooldown_seconds)
             continue
 
         before_count = count_registered_handles(index_path)
         active_chain = ready_chain + [provider for provider in provider_order if provider not in ready_chain]
-        remaining_run_seconds = max_run_seconds - seconds_since(current.get("run_started_at"))
-        browser_setup = ensure_browser_search_surface(active_province)
-        cycle_timeout_seconds = max(
-            60,
-            min(
-                single_cycle_timeout_seconds,
-                max(remaining_run_seconds, 60),
-            ),
-        )
+        search_number = searches_completed + 1
         result = run_cycle(
             build_cycle_message(
                 active_chain,
-                batch_size,
                 active_province,
-                province_order,
                 candidate_cooldown_seconds,
                 str(index_path),
+                search_number,
+                max_candidate_searches,
             ),
-            cycle_timeout_seconds,
+            single_cycle_timeout_seconds,
         )
         after_count = count_registered_handles(index_path)
         new_unique = max(after_count - before_count, 0)
@@ -512,28 +362,22 @@ def run_loop() -> dict[str, Any]:
             "finished_at": utc_now().isoformat().replace("+00:00", "Z"),
             "provider": ready_chain[0],
             "province": active_province,
-            "batch_size": batch_size,
-            "candidate_cooldown_seconds": candidate_cooldown_seconds,
+            "search_number": search_number,
             "new_unique": new_unique,
             "timed_out": bool(result.get("timed_out")),
             "returncode": result.get("returncode"),
             "stderr": result.get("stderr", ""),
-            "route": result.get("route"),
-            "browser_setup": browser_setup,
             "probe_results": probe_results,
         }
         cycles.append(cycle_summary)
 
-        if new_unique > 0:
-            provider_order = provider_order[1:] + provider_order[:1]
-            time.sleep(candidate_cooldown_seconds)
-            continue
-
         refreshed = status_state()["state"]
-        last_unique = parse_utc(refreshed.get("last_unique_qualified_at")) or utc_now()
-        idle_seconds = int((utc_now() - last_unique).total_seconds())
-        if idle_seconds >= idle_stop_seconds:
-            finished = store_command("finish-run", "--stop-reason", f"no new unique qualified creator for {idle_stop_seconds} seconds")
+        if int(refreshed.get("searches_completed", 0)) >= max_candidate_searches:
+            finished = store_command(
+                "finish-run",
+                "--stop-reason",
+                f"reached max candidate searches ({max_candidate_searches})",
+            )
             return {"ok": True, "state": finished["state"], "cycles": cycles}
 
         provider_order = provider_order[1:] + provider_order[:1]

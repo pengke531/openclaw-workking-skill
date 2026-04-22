@@ -18,7 +18,7 @@ fi
 
 mkdir -p "$TARGET_ROOT/skills"
 FOUND_SKILL=0
-for skill_dir in "$SKILLS_SOURCE_ROOT"/workking*; do
+for skill_dir in "$SKILLS_SOURCE_ROOT"/workking* "$SKILLS_SOURCE_ROOT"/work[1-7]; do
   if [ -d "$skill_dir" ]; then
     FOUND_SKILL=1
     skill_name="$(basename "$skill_dir")"
