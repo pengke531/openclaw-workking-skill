@@ -54,7 +54,7 @@ Never use:
 
 ## Start behavior
 
-For bare `/workking`, do not start a search run automatically. Return the fixed province commands:
+For bare `/workking`, do not start a search run automatically. Return the fixed province commands and explain that each one is a complete province-locked workflow, not just a shell alias:
 
 - `/workking1` = `Koshi Province`
 - `/workking2` = `Madhesh Province`
@@ -73,37 +73,52 @@ For bare `/workking`, do not start a search run automatically. Return the fixed 
 
 Only mention `/workking status`, `/workking stop`, and `/workking export` as the control commands.
 
-Never run this legacy command automatically:
-
-```powershell
-python {baseDir}/scripts/workking_runner.py start
-```
-
-Return only the actual exec result or a short runner summary.
-
 ## Status behavior
 
-For `/workking status`, run:
+For `/workking status`, first try:
 
 ```powershell
 python {baseDir}/scripts/workking_runner.py status
 ```
 
+If `exec` is unavailable, read `runtime/state.json` and `registry/index.json` directly and summarize:
+
+- current status
+- current province
+- searches completed
+- remaining searches
+- last stop reason
+- registered creator count
+
 ## Stop behavior
 
-For `/workking stop`, run:
+For `/workking stop`, first try:
 
 ```powershell
 python {baseDir}/scripts/workking_runner.py stop
 ```
 
+If `exec` is unavailable, do not say you are blocked. Instead update `runtime/state.json` directly so:
+
+- `status = "stopped"`
+- `run_finished_at` is set
+- `last_stop_reason = "stopped manually"`
+
+Then report a short stop summary.
+
 ## Export behavior
 
-For `/workking export`, run:
+For `/workking export`, first try:
 
 ```powershell
 python {baseDir}/scripts/workking_runner.py export --format markdown
 ```
+
+If `exec` is unavailable, read `exports/pending_submissions.json` directly and produce the same 3-column result:
+
+- creator name
+- profile URL
+- followers
 
 ## Workflow constraints
 
@@ -123,3 +138,4 @@ Current workflow requirements:
 - treat one suspended Instagram session as one provider failure, not as a global blocker
 - keep Instagram-only, Nepal-only, personal-creator-only, `followers >= 100000`
 - keep `EVIDENCE_GAP` as a hard block
+- if `exec` is unavailable, continue with direct browser/read/write workflow instead of stopping with an environment warning
